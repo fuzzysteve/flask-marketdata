@@ -45,6 +45,8 @@ All configuration is through environment variables.
 | `ORDERBOOK_DIR` | `/opt/orderbooks` | Order book dumps served under `/orderbooks/` |
 | `HOST` / `PORT` | `127.0.0.1` / `8001` | gunicorn bind address |
 | `WORKERS` | `4` | gunicorn worker processes |
+| `STATSD_HOST` | *(unset)* | Send gunicorn metrics to a statsd server, e.g. `127.0.0.1:8125` for Netdata |
+| `STATSD_PREFIX` | `market` | Prefix for those metrics |
 
 Keep production values in a file readable only by the service account, for example
 `/etc/market-python.env`:

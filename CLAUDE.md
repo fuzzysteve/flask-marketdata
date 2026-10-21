@@ -43,4 +43,8 @@ gunicorn uses `preload_app`, so HUP or reload does **not** load new code. Always
 - **Service:** systemd unit `market-python`. It runs as `www-data` from `/opt/web/market/pyapp` and binds `127.0.0.1:8001`. The env file is `/etc/market-python.env` (root:www-data, 640).
 - **nginx:** `/etc/nginx/sites-available/default` (443 server) proxies to gunicorn. The `/aggregates/` cache is defined in `/etc/nginx/conf.d/aggregates-cache-python.conf`. `/orderbooks/` is served by nginx from `/opt/orderbooks`.
 - **Rollback to PHP:** the PHP site in `/opt/web/market` (`src/`, `templates/`, `public/`) is kept, and its nginx block is commented out in `default`. php-fpm (8.1, on 127.0.0.1:9000) and `phpsessionclean.timer` are stopped and disabled. To switch back, run `systemctl enable --now php8.1-fpm phpsessionclean.timer`, restore `default.bak-20261021-prepython`, and reload nginx. Don't delete the PHP code or that block without asking. Netdata's php-fpm monitoring was removed as well: the `/fpm-status` block (backup at `/etc/nginx/local-status.conf.bak-20261021`) and the python.d `phpfpm` collector (`phpfpm: no`). Restore both if you want php-fpm monitored again.
+- **Monitoring (Netdata):**
+  - gunicorn statsd metrics (`STATSD_HOST=127.0.0.1:8125`) are charted by `/etc/netdata/statsd.d/gunicorn.conf`.
+  - Worker processes are tracked by the `gunicorn` group in `/etc/netdata/apps_groups.conf`.
+  - nginx timings (`rt=`, `urt=`) and cache status (`cs=`) are parsed by the custom format in `/etc/netdata/python.d/web_log.conf`.
 - **EVE SSO credentials:** read from `PYAPP_EVE_CLIENT_ID` / `PYAPP_EVE_CLIENT_SECRET`, falling back to the PHP site's `src/secretreal.php`.
