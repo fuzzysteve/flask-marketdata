@@ -47,4 +47,5 @@ gunicorn uses `preload_app`, so HUP or reload does **not** load new code. Always
   - gunicorn statsd metrics (`STATSD_HOST=127.0.0.1:8125`) are charted by `/etc/netdata/statsd.d/gunicorn.conf`.
   - Worker processes are tracked by the `gunicorn` group in `/etc/netdata/apps_groups.conf`.
   - nginx timings (`rt=`, `urt=`) and cache status (`cs=`) are parsed by the custom format in `/etc/netdata/python.d/web_log.conf`.
+  - The alarm `gunicorn_log_errors` (`/etc/netdata/health.d/gunicorn.conf`) fires on gunicorn critical/error/exception log messages. 5xx responses are covered by the stock web_log `1m_internal_errors` alarm.
 - **EVE SSO credentials:** read from `PYAPP_EVE_CLIENT_ID` / `PYAPP_EVE_CLIENT_SECRET`, falling back to the PHP site's `src/secretreal.php`.
