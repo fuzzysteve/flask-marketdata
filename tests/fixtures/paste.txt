@@ -1,0 +1,17 @@
+Tritanium	1,234,567	Mineral			12,345.67 m3
+Pyerite	12.345	Mineral
+Rifter (2 units)
+200mm AutoCannon I	Projectile Weapon	Small	3
+5 Nanite Repair Paste
+Warrior II x5
+Tritanium: 1,000
+Pyerite	100,
+[Rifter, My Rifter]
+200mm AutoCannon I, Qty: 4
+Some Prefix	Large Skill Injector	whatever
+Large Skill Injector
+Rifter Blueprint Copy	1
+30 day pilot's license extension (PLEX)	3	Pilot
+Unknown Thing	55
+  Warrior II  
+Tritanium	100	Mineral	5

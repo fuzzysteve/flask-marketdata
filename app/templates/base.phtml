@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8"/>
+        <script>
+        (function() {
+            try {
+                var stored = localStorage.getItem('theme');
+                if (stored === 'light' || stored === 'dark') {
+                    document.documentElement.setAttribute('data-theme', stored);
+                }
+            } catch (e) {}
+        })();
+        </script>
+        <title>{% block title %}{% endblock %}</title>
+        <link rel="stylesheet" href="/css/main.css">
+        <link rel="stylesheet" href="/css/pure-min.css">
+        <link href='https://fonts.googleapis.com/css?family=Electrolize' rel='stylesheet' type='text/css'>
+        <link href='https://fonts.googleapis.com/css?family=Source+Code+Pro' rel='stylesheet' type='text/css'>
+        <link rel="stylesheet" href="https://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+        <script src="https://code.jquery.com/jquery-2.2.4.min.js"></script>
+        <script src="https://code.jquery.com/ui/1.11.4/jquery-ui.min.js"></script>
+        <script src="//cdn.datatables.net/1.10.12/js/jquery.dataTables.min.js"></script>
+        <link rel="stylesheet" href="/css/grids-responsive-min.css">
+        <link rel="stylesheet" href="//cdn.datatables.net/1.10.12/css/jquery.dataTables.min.css">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        {% block extrahead %}{% endblock %}
+    </head>
+    <body>
+    <div class="pure-menu pure-menu-horizontal center menu-black">
+        <a href="/" class="pure-menu-heading pure-menu-link">Fuzzwork Market Data</a>
+        <ul class="pure-menu-list">
+            <li class="pure-menu-item"><a href="/hub/" class="pure-menu-link">Market Hubs</a></li>
+            <li class="pure-menu-item"><a href="/plex/" class="pure-menu-link">PLEX</a></li>
+            <li class="pure-menu-item"><a href="/browser/" class="pure-menu-link">Browser</a></li>
+            <li class="pure-menu-item"><a href="/region/" class="pure-menu-link">Regions</a></li>
+            <li class="pure-menu-item"><a href="/type/" class="pure-menu-link">Type Search</a></li>
+            <li class="pure-menu-item"><a href="/station/" class="pure-menu-link">Stations</a></li>
+            <li class="pure-menu-item"><a href="/appraisal/" class="pure-menu-link">Appraisal</a></li>
+            <li class="pure-menu-item"><a href="/api/" class="pure-menu-link">API</a></li>
+            <li class="pure-menu-item"><a href="/about/" class="pure-menu-link">About</a></li>
+            <li class="pure-menu-item"><button type="button" id="theme-toggle" class="theme-toggle" aria-label="Toggle dark mode">🌙</button></li>
+        </ul>
+    </div>
+    <script>
+    (function() {
+        var root = document.documentElement;
+        var btn = document.getElementById('theme-toggle');
+        function effectiveTheme() {
+            var explicit = root.getAttribute('data-theme');
+            if (explicit === 'light' || explicit === 'dark') {
+                return explicit;
+            }
+            return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+        }
+        function updateLabel() {
+            var dark = effectiveTheme() === 'dark';
+            btn.textContent = dark ? '☀️' : '🌙';
+            btn.setAttribute('aria-label', dark ? 'Switch to light mode' : 'Switch to dark mode');
+        }
+        btn.addEventListener('click', function() {
+            var next = effectiveTheme() === 'dark' ? 'light' : 'dark';
+            root.setAttribute('data-theme', next);
+            try { localStorage.setItem('theme', next); } catch (e) {}
+            updateLabel();
+        });
+        updateLabel();
+    })();
+    </script>
+        {% block content %}{% endblock %}
+<footer>
+EVE Online and the EVE logo are the registered trademarks of CCP hf. All rights are reserved worldwide. All other trademarks are the property of their respective owners. EVE Online, the EVE logo, EVE and all associated logos and designs are the intellectual property of CCP hf. All artwork, screenshots, characters, vehicles, storylines, world facts or other recognizable features of the intellectual property relating to these trademarks are likewise the intellectual property of CCP hf. CCP hf. has granted permission to market.fuzzwork.co.uk to use EVE Online and all associated logos and designs for promotional and information purposes on its website but does not endorse, and is not in any way affiliated with, market.fuzzwork.co.uk. CCP is in no way responsible for the content on or functioning of this website, nor can it be liable for any damage arising from the use of this website.
+</footer>
+        {% block footercontent %}{% endblock %}
+<script>
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-79883886-1', 'auto');
+  ga('send', 'pageview');
+
+</script>
+    </body>
+</html>
+

@@ -1,0 +1,116 @@
+{% extends "base.phtml" %}
+
+
+{% block title %}Fuzzwork Market Data{% endblock %}
+
+{% block content %}
+<div class="content">
+<div class="pure-g">
+<div class="pure-u-1">
+<h1 class="title">Fuzzwork Market Data</h1>
+</div>
+</div>
+<div class="pure-g">
+<div class="pure-u-1-1">
+<p>Wheee! API.</p>
+<p>Just a simple one at the moment. Global, Regions, Systems and all station (Including player owned structures. Assuming I have data for them. I don't for private.).</p>
+<p>Yes, all systems now</p>
+<ul>
+<li>Global - 0
+<li>Jita - 30000142
+<li>Perimeter - 30000144
+<li>Jita 4-4 CNAP - 60003760
+<li>Amarr VIII - 60008494
+<li>Dodixie - 60011866
+<li>Rens - 60004588
+<li>Hek - 60005686
+</ul>
+<p>Formatted one of these ways</p>
+<pre>https://market.fuzzwork.co.uk/aggregates/?region=10000002&types=34,35,36,37,38,39,40</pre>
+<pre>https://market.fuzzwork.co.uk/aggregates/?station=60003760&types=34,35,36,37,38,39,40</pre>
+<p>(Due to how it works, you can give a station or a system as a region, and it will return correctly. These are all precalculated aggregates)</p>
+<p>Returning a json dataset looking like (this is truncated) the following</p>
+<pre>
+{
+  "34": {
+    "buy": {
+      "weightedAverage": "4.02878502065",
+      "max": "5.95",
+      "min": "0.01",
+      "stddev": "1.62036217159",
+      "median": "5.0",
+      "volume": "10024734026.0",
+      "orderCount": "52",
+      "percentile": "5.50168617928"
+    },
+    "sell": {
+      "weightedAverage": "6.60015441538",
+      "max": "2201571.0",
+      "min": "5.01",
+      "stddev": "177420.733866",
+      "median": "6.38",
+      "volume": "25573930856.0",
+      "orderCount": "179",
+      "percentile": "5.92257900667"
+    }
+  },
+  "35": {
+    "buy": {
+      "weightedAverage": "2.95108749592",
+      "max": "9.32",
+      "min": "0.01",
+      "stddev": "2.33386568045",
+      "median": "8.08",
+      "volume": "3567567586.0",
+      "orderCount": "43",
+      "percentile": "8.93197172057"
+    },
+    "sell": {
+      "weightedAverage": "11.8397717552",
+      "max": "88.97",
+      "min": "8.9",
+      "stddev": "6.28077891535",
+      "median": "10.49",
+      "volume": "13983717157.0",
+      "orderCount": "170",
+      "percentile": "9.30539352676"
+    }
+  }
+}
+</pre>
+<p>I <i>highly</i> recommend pulling all the aggregates into one sheet, and then using vlookup to retrieve them. It's more efficient for both you and me</p>
+<p>An example function for use with Google Docs can be found <a href="https://github.com/fuzzysteve/eve-googledocs-script/blob/master/FuzzworkMarket.gs">on my github page</a>. An example of it in use is <a href="https://docs.google.com/spreadsheets/d/1IixV0eNqg19FE6cLzb83G1Ucb0Otl-Jnvm6csAlPKwo/edit?usp=sharing">shared</a> from my google drive</p>
+<p>No real example with Excel I'm afraid. I'd suggest using XLWings to pull out the bits you want. Alternatively use powerquery.</p>
+<h2>Power Query</h2>
+<p>If you have a recent version of Excel, you have powerquery available.</p>
+<ol>
+<li>Open excel and go to a new worksheet
+<li>hit the 'New Query' button on the Data ribbon.
+<li>Go to 'from other sources', and pick from Web
+<li>Give it the url to get the aggregates you want. You'll need to do more research here to make it dynamic
+<li>Hit ok.
+<li>You'll get a list of the type ids, followed by record. 
+<li>on the convert ribbon, hit 'into table'
+<li>Next to value, in the resultant table, you'll see two arrows pointing apart from each other. hit it, and leave the buy and sell ticked. untick 'use original column names as prefix'
+<li>You'll now have two more columns, called buy and sell. split those with that same icon. I'd suggest leaving the original name as a prefix this time.
+<li>Close and load. you're now done.
+<li>Just hit refresh all, when you want to update them. You can, through the connections button on the data ribbon, set the query up to refresh on open, or on a timer. just select it and go to the properties.
+</ol>
+<p>There's also the api https://market.fuzzwork.co.uk/api/orderset which returns the most recent orderset id. This may be of use if you're downloading the order book. Please don't do this every 30 minutes. Get the data youself, direct from CCP. It'll be fresher and more reliable.</p>
+<hr>
+<p>If you're wanting <em>all the aggregated market date</em>, then you'll probably want to get https://market.fuzzwork.co.uk/aggregatecsv.csv.gz, which containst a full dump of the data. Though if an item isn't on the market, you'll get _nothing_ back for it. and it'll require a little manipulation to be easily usable. Unfortunately it's too big for google sheets. excel handles it.</p>
+
+<hr>
+<h2>Files</h2>
+<ul>
+<li><a href="/orderbooks/latest.csv.gz">latest.csv.gz</a> - linked to the latest file</li>
+{% for file in files%}
+    {% if file != "." and file != ".." %}
+    <li><a href="/orderbooks/{{(file|split('/'))[3]}}">{{(file|split('/'))[3]}}</a></li>
+    {% endif %}
+{% endfor %}
+</ul>
+</div>
+</div>
+</div>
+{% endblock %}
