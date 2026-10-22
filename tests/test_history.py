@@ -143,3 +143,19 @@ def test_backfill_plan_picks_nearest_orderset_per_slot():
 def test_timestamp_accepts_postgres_text():
     assert history._timestamp('2026-09-23 00:06:00.64108') == datetime.datetime(2026, 9, 23, 0, 6)
     assert history._timestamp('2026-09-23 00:06:00') == datetime.datetime(2026, 9, 23, 0, 6)
+
+
+@pytest.mark.skipif(not _live_db(), reason='needs local Postgres')
+def test_record_copy_text_round_trips(scratch_schema):
+    conn = scratch_schema
+    history.ensure_schema(conn)
+    when = datetime.datetime(2026, 7, 1, 0, 6, 1)
+    found = {(60003760, 34): {'true': (3.7744913663901, 3.83, 0.01, 1e10, 12), 'false': (4.1, 999.0, 3.94, 5.0, 3)},
+             (0, 35): {'false': (0.1 + 0.2, 7.0, 7.0, 1.0, 1)}}
+    history.record(when, 99, history.copy_text(when, found), len(found))
+    rows = {(r['location'], r['typeID']): r for r in conn.execute('select * from aggregatehistory').fetchall()}
+    jita = rows[(60003760, 34)]
+    assert float(jita['buypercentile']) == 3.7744913663901 and jita['buyorders'] == 12
+    assert float(rows[(0, 35)]['sellpercentile']) == 0.1 + 0.2
+    assert rows[(0, 35)]['buypercentile'] is None and rows[(0, 35)]['buyorders'] is None
+    assert conn.execute('select "orderSet", rows from aggregatehistory_runs').fetchone() == {'orderSet': 99, 'rows': 2}

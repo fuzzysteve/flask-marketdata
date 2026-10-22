@@ -5,6 +5,7 @@ Snapshots run four times a day (systemd timer, see systemd/). After a year a
 month is thinned to the first snapshot of each UTC day. The table is
 partitioned by month, so thinning rebuilds one partition and swaps it in,
 which returns the space without a VACUUM FULL on the live table."""
+import collections
 import datetime
 import gzip
 import logging
@@ -127,8 +128,11 @@ def collect(r, locations):
 
 
 def rows_for(snapshot, found):
+    # In primary-key order ("typeID", location): each snapshot then walks the
+    # index once instead of hopping around it, which matters with small shared_buffers.
     empty = (None,) * 5
-    for (location, typeid), sides in found.items():
+    for location, typeid in sorted(found, key=lambda key: (key[1], key[0])):
+        sides = found[(location, typeid)]
         bpct, bmax, _, bvol, borders = sides.get('true', empty)
         spct, _, smin, svol, sorders = sides.get('false', empty)
         yield (snapshot, location, typeid, bpct, bmax, bvol, spct, smin, svol, borders, sorders)
@@ -156,7 +160,7 @@ def snapshot():
 
     with db.pool().connection() as conn:
         ensure_partition(conn, _next_month(_month_start(when)))
-    record(when, orderset['id'], found)
+    record(when, orderset['id'], copy_text(when, found), len(found))
     log.info('recorded %s aggregates for orderset %s (%s)', len(found), orderset['id'], when)
     return len(found)
 
@@ -287,15 +291,25 @@ def aggregate_orderbook(orders, locations):
     return found
 
 
-def record(when, orderset_id, found):
+def _copy_field(value):
+    # repr() round-trips a float exactly, so float8 gets the same value.
+    return '\\N' if value is None else repr(value) if isinstance(value, float) else str(value)
+
+
+def copy_text(when, found):
+    """The snapshot as COPY text. Built in the backfill workers, so the writer
+    only streams bytes rather than converting ~290k rows itself."""
+    return ''.join('\t'.join(map(_copy_field, row)) + '\n' for row in rows_for(when, found)).encode()
+
+
+def record(when, orderset_id, payload, rows):
     """Write one snapshot (rows and its run) in a transaction."""
     with db.pool().connection() as conn, conn.transaction():
         ensure_partition(conn, when)
         with conn.cursor().copy(f'copy aggregatehistory ({",".join(_COLUMNS)}) from stdin') as copy:
-            for row in rows_for(when, found):
-                copy.write_row(row)
+            copy.write(payload)
         conn.execute('insert into aggregatehistory_runs (snapshot,"orderSet",rows) '
-                     'values (%(s)s,%(id)s,%(rows)s)', {'s': when, 'id': orderset_id, 'rows': len(found)})
+                     'values (%(s)s,%(id)s,%(rows)s)', {'s': when, 'id': orderset_id, 'rows': rows})
 
 
 SNAPSHOT_HOURS = (0, 6, 12, 18)
@@ -321,25 +335,24 @@ def backfill_plan(ordersets, recorded, start, end):
     return plan
 
 
-def _aggregate_dump(job):
-    path, locations = job
-    return aggregate_orderbook(read_orderbook(path), locations)
+def _aggregate_dump(path, when, locations):
+    found = aggregate_orderbook(read_orderbook(path), locations)
+    return copy_text(when, found), len(found)
 
 
 def backfill(days=30, workers=4, orderbook_dir=None):
-    """Fill the last `days` days from the order book dumps, up to the first live
-    snapshot. Redis and the orders tables are only read, never written."""
+    """Fill the last `days` days from the order book dumps, skipping ordersets
+    already recorded (live or by an earlier, possibly interrupted, backfill).
+    Redis and the orders tables are only read, never written."""
     import concurrent.futures
     import os
     from . import ORDERBOOK_DIR
     orderbook_dir = orderbook_dir or ORDERBOOK_DIR
     with db.pool().connection() as conn:
         ensure_schema(conn)
-        runs = conn.execute('select snapshot, "orderSet" from aggregatehistory_runs').fetchall()
-    recorded = {row['orderSet'] for row in runs}
-    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    start = now - datetime.timedelta(days=days)
-    end = min([_timestamp(row['snapshot']) for row in runs] + [now])
+        recorded = {row['orderSet'] for row in conn.execute('select "orderSet" from aggregatehistory_runs')}
+    end = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    start = end - datetime.timedelta(days=days)
     ordersets = [(row['id'], _timestamp(row['downloaded']))
                  for row in db.fetch_all('select id, downloaded from orderset where downloaded>=%(lo)s and downloaded<%(hi)s',
                                          {'lo': start - SLOT_TOLERANCE, 'hi': end + SLOT_TOLERANCE})]
@@ -348,9 +361,22 @@ def backfill(days=30, workers=4, orderbook_dir=None):
     plan = backfill_plan(ordersets, recorded, start, end)
     log.info('backfilling %s snapshots from %s to %s', len(plan), start, end)
     locations = {int(location) for location in _locations()}
-    jobs = [(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz', locations) for _, orderset_id in plan]
+    # Keep only a few results in flight: each is ~25 MB, and an unbounded queue
+    # grows whenever the readers outpace the writer.
+    pending = collections.deque()
+
+    def write_oldest():
+        when, orderset_id, future = pending.popleft()
+        payload, rows = future.result()
+        record(when, orderset_id, payload, rows)
+        log.info('backfilled orderset %s (%s): %s aggregates', orderset_id, when, rows)
+
     with concurrent.futures.ProcessPoolExecutor(workers) as pool:
-        for (when, orderset_id), found in zip(plan, pool.map(_aggregate_dump, jobs)):
-            record(when, orderset_id, found)
-            log.info('backfilled orderset %s (%s): %s aggregates', orderset_id, when, len(found))
+        for when, orderset_id in plan:
+            pending.append((when, orderset_id, pool.submit(
+                _aggregate_dump, f'{orderbook_dir}/orderset-{orderset_id}.csv.gz', when, locations)))
+            if len(pending) > workers:
+                write_oldest()
+        while pending:
+            write_oldest()
     return len(plan)
