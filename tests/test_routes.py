@@ -72,6 +72,25 @@ def test_static_files_do_not_expose_php(client):
     assert client.get('/css/main.css').status_code == 200
     assert client.get('/index.php').status_code == 404
     assert client.get('/index.php.bak-20261019').status_code == 404
+    assert client.get('/images/sort_both.png').status_code == 200
+    for icon in ('/favicon.ico', '/favicon.svg', '/apple-touch-icon.png'):
+        assert client.get(icon).status_code == 200
+
+
+def test_aggregate_csv_is_not_content_encoded(client, tmp_path, monkeypatch):
+    from app.routes import static
+    (tmp_path / 'aggregatecsv.csv.gz').write_bytes(b'\x1f\x8b')
+    monkeypatch.setattr(static, 'PUBLIC_DIR', str(tmp_path))
+    r = client.get('/aggregatecsv.csv.gz')
+    assert r.status_code == 200 and 'Content-Encoding' not in r.headers
+    assert r.headers['Content-Type'] == 'application/octet-stream'
+
+
+def test_api_aggregates_alias(client):
+    r = client.get('/api/aggregates/?region=10000002&types=34')
+    assert r.status_code == 308
+    assert r.headers['Location'] == '/aggregates/?region=10000002&types=34'
+    assert client.post('/api/aggregates/').headers['Location'] == '/aggregates/'
 
 
 def _live_backends_available():

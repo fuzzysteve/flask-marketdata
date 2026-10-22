@@ -11,7 +11,7 @@ bp = Blueprint('static_files', __name__)
 
 APP_STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')
 
-STATIC_FILES = ('robots.txt', '504.html')
+STATIC_FILES = ('robots.txt', '504.html', 'favicon.ico', 'favicon.svg', 'apple-touch-icon.png')
 
 
 @bp.route('/css/<path:filename>')
@@ -24,6 +24,11 @@ def js(filename):
     return send_from_directory(f'{APP_STATIC_DIR}/js', filename)
 
 
+@bp.route('/images/<path:filename>')
+def images(filename):
+    return send_from_directory(f'{APP_STATIC_DIR}/images', filename)
+
+
 @bp.route('/<any(' + ', '.join(f'"{f}"' for f in STATIC_FILES) + '):filename>')
 def static_file(filename):
     return send_from_directory(APP_STATIC_DIR, filename)
@@ -31,9 +36,12 @@ def static_file(filename):
 
 @bp.route('/aggregatecsv.csv.gz')
 def aggregate_csv():
-    return send_from_directory(PUBLIC_DIR, 'aggregatecsv.csv.gz')
+    # nginx serves this (and /orderbooks/) in production. Passing a mimetype stops
+    # Werkzeug guessing text/csv + Content-Encoding: gzip, which made clients
+    # unpack the file; nginx sends the raw gzip bytes, as the PHP site did.
+    return send_from_directory(PUBLIC_DIR, 'aggregatecsv.csv.gz', mimetype='application/octet-stream')
 
 
 @bp.route('/orderbooks/<path:filename>')
 def orderbook(filename):
-    return send_from_directory(ORDERBOOK_DIR, filename)
+    return send_from_directory(ORDERBOOK_DIR, filename, mimetype='application/octet-stream')

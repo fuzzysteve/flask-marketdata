@@ -1,6 +1,6 @@
 import glob
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, redirect, render_template, request
 
 from .. import ORDERBOOK_DIR, cache, db, json_response, orders, phpcompat
 from .pages import REGION_LIST_SQL
@@ -50,6 +50,13 @@ def aggregates():
     response = json_response(phpcompat.php_array(result), expires_in=300)
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
+
+
+@bp.route('/api/aggregates/', methods=['GET', 'POST'])
+def aggregates_alias():
+    # A commonly guessed URL. 308 keeps the method and body for POSTs.
+    query = request.query_string.decode()
+    return redirect('/aggregates/' + (f'?{query}' if query else ''), code=308)
 
 
 @bp.route('/api/orderset')
