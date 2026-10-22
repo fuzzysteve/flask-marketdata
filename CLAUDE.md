@@ -11,6 +11,7 @@ Flask port of the Fuzzwork Market PHP (Slim 3) site. It went live on market.fuzz
 - `app/phpcompat.py`: reproduces PHP/Twig behaviour (`number_format`, `date`, `json_encode`, numeric strings)
 - `app/appraisal_parser.py`: the paste-parsing regex chain
 - `app/templates/*.phtml`: Jinja templates. They were Twig and are still Twig-compatible.
+- `app/static/`: CSS/JS, `favicon.ico`/`.svg`, `apple-touch-icon.png`. Static files are served by Flask (only listed paths; see `routes/static.py`).
 - `tests/`, plus `scripts/compare.py` for diffing two deployments
 
 ## Rules
@@ -22,7 +23,10 @@ Flask port of the Fuzzwork Market PHP (Slim 3) site. It went live on market.fuzz
   - Don't "fix" these behaviours without being asked.
 - **Known PHP quirks are kept deliberately** and commented in code. For example, the `, Qty:` pattern never matches because lines are lowercased first. Ask before changing them.
 - **Templates:** Jinja loops over a dict's keys, but Twig looped over its values, so pass lists where templates loop. A filter can't be followed by a subscript: write `(x|split('/'))[3]`. Autoescape is on for `.phtml`.
-- **Redis:** market keys (`<location>|<typeID>|<true|false>`, `fp-*`) are written by the loaders. Treat them as read-only. Keys this app writes use the `py:` prefix (`app/cache.py`).
+- **Front-end libraries** (CDN, in `base.phtml` and `browser.phtml`): jQuery 3.7.1, jQuery UI 1.14.1 (autocomplete only), DataTables 1.13.11 + Responsive 2.5.0. Each tag has an `integrity` hash, so a version change needs a new hash: `curl -s <url> | openssl dgst -sha384 -binary | openssl base64 -A`. Stay on DataTables 1.x: 2.x changes the API these pages use.
+- **DataTables tables:** every header row belongs inside `<thead>` and each body row needs one cell per column. A stray row between `</thead>` and `<tbody>` gets its own tbody, DataTables then manages only that row, and 1.13 raises an "Incorrect column count" alert (this was the appraisal totals row; it now uses `orderCellsTop`).
+- **Analytics:** none. The old Universal Analytics tag was removed on 2026-10-22.
+- **Redis:** market keys (`<location>|<typeID>|<true|false>`, `fp-*`) are written by the loaders. Treat them as read-only. Keys this app writes use the `py:` prefix (`app/cache.py`): `py:sde:*` lookups (1h) and `py:latest_orderset` (30s; a new orderset arrives every 30 minutes and old ones are kept). Order pages fall back to the DB if Redis is down.
 - **DB writes:** only `POST /appraisal/` writes, and only when `PYAPP_ALLOW_WRITES=1`.
 - **Public repository.** Never commit credentials. Configuration comes from environment variables (see README).
 - **Style:** match the surrounding code. SQL stays close to the original queries, with psycopg `%(name)s` parameters.
@@ -38,11 +42,22 @@ journalctl -u market-python; tail logs/error.log logs/access.log
 
 gunicorn uses `preload_app`, so HUP or reload does **not** load new code. Always restart.
 
+**Browser testing:** start headless Chrome with the `chrome-devtools-mcp` skill (Chrome and Node 22 in `/opt/node22` are installed for it), and stop it afterwards. To test unreleased code, run a second instance with its own pid file, so logrotate's USR1 never targets it:
+
+```sh
+set -a; . /etc/market-python.env; set +a
+STATSD_HOST= WORKERS=2 PORT=8002 .venv/bin/gunicorn -c gunicorn.conf.py --pid <scratch>/test.pid \
+  --access-logfile <scratch>/test-access.log --error-logfile <scratch>/test-error.log 'app:create_app()'
+```
+
+HTML is sent with `Cache-Control: public, max-age=300`, so reload with the cache bypassed after changing a template.
+
 ## Production
 
 - **Service:** systemd unit `market-python`. It runs as `www-data` from `/opt/web/market/pyapp` and binds `127.0.0.1:8001`. The env file is `/etc/market-python.env` (root:www-data, 640).
-- **nginx:** `/etc/nginx/sites-available/default` (443 server) proxies to gunicorn. The `/aggregates/` cache is defined in `/etc/nginx/conf.d/aggregates-cache-python.conf`. `/orderbooks/` is served by nginx from `/opt/orderbooks`. `location /` sets `proxy_buffer_size 32k` / `proxy_buffers 16 16k`: the cache key (the full URL) shares that buffer, and long `/aggregates/?types=...` URLs (up to ~8k) 502 with the 4k default. gunicorn's `limit_request_line = 8190` exists for the same URLs.
+- **nginx:** `/etc/nginx/sites-available/default` (443 server) proxies to gunicorn. The `/aggregates/` cache is defined in `/etc/nginx/conf.d/aggregates-cache-python.conf`; about 22% of requests hit it, and most misses are distinct type lists, so normalising the key isn't worth it. `/orderbooks/` is served by nginx from `/opt/orderbooks`, and `/aggregatecsv.csv.gz` (`location =` block, from the server root `/opt/web/market/public`). Both go out as raw gzip with `application/octet-stream` and no `Content-Encoding`, as on the PHP site. The Flask routes for them do the same, for when nginx isn't in front. `location /` sets `proxy_buffer_size 32k` / `proxy_buffers 16 16k`: the cache key (the full URL) shares that buffer, and long `/aggregates/?types=...` URLs (up to ~8k) 502 with the 4k default. gunicorn's `limit_request_line = 8190` exists for the same URLs.
 - **Rollback to PHP:** the PHP site in `/opt/web/market` (`src/`, `templates/`, `public/`) is kept, and its nginx block is commented out in `default`. php-fpm (8.1, on 127.0.0.1:9000) and `phpsessionclean.timer` are stopped and disabled. To switch back, run `systemctl enable --now php8.1-fpm phpsessionclean.timer`, restore `default.bak-20261021-prepython`, and reload nginx. Don't delete the PHP code or that block without asking. Netdata's php-fpm monitoring was removed as well: the `/fpm-status` block (backup at `/etc/nginx/local-status.conf.bak-20261021`) and the python.d `phpfpm` collector (`phpfpm: no`). Restore both if you want php-fpm monitored again.
+- **Logs:** `/etc/logrotate.d/market-python` rotates `logs/*.log` daily and keeps 14 compressed copies, then sends gunicorn `USR1` (via `logs/gunicorn.pid`) to reopen them. `access.log` duplicates nginx's log and grows by roughly 750 MB a day before compression.
 - **Monitoring (Netdata):**
   - gunicorn statsd metrics (`STATSD_HOST=127.0.0.1:8125`) are charted by `/etc/netdata/statsd.d/gunicorn.conf`.
   - Worker processes are tracked by the `gunicorn` group in `/etc/netdata/apps_groups.conf`.
