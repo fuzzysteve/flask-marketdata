@@ -24,11 +24,6 @@ def js(filename):
     return send_from_directory(f'{APP_STATIC_DIR}/js', filename)
 
 
-@bp.route('/images/<path:filename>')
-def images(filename):
-    return send_from_directory(f'{APP_STATIC_DIR}/images', filename)
-
-
 @bp.route('/<any(' + ', '.join(f'"{f}"' for f in STATIC_FILES) + '):filename>')
 def static_file(filename):
     return send_from_directory(APP_STATIC_DIR, filename)

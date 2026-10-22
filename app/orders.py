@@ -1,7 +1,11 @@
 """Order-book queries shared by the type/region/hub/station/empire/plex pages.
 The SQL is the same as src/routes.php, with the per-page join and filter
 factored out."""
-from . import db
+import redis
+
+from . import cache, db
+
+LATEST_ORDERSET_TTL = 30
 
 _ORDER_COLUMNS = ('"orderID",orders."typeID",issued,orders.volume,"volumeEntered","minVolume",'
                   'price,orders."stationID",{range}duration,"stationName","typeName","regionName",region')
@@ -22,7 +26,22 @@ _ORDER_SQL = '''
 
 
 def latest_orderset():
-    return db.fetch_one('select max(id) from orderset')['max']
+    """Cached briefly in Redis: every order-book page needs it, a new orderset
+    only arrives every 30 minutes, and old ones are kept, so a slightly stale id
+    still has its orders. Falls back to the DB if Redis is unavailable."""
+    key = cache.KEY_PREFIX + 'latest_orderset'
+    try:
+        cached = cache.client().get(key)
+    except redis.RedisError:
+        cached = None
+    if cached is not None:
+        return int(cached)
+    orderset = db.fetch_one('select max(id) from orderset')['max']
+    try:
+        cache.client().setex(key, LATEST_ORDERSET_TTL, orderset)
+    except redis.RedisError:
+        pass
+    return orderset
 
 
 def type_name(typeid):

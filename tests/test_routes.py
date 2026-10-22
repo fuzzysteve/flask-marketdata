@@ -1,8 +1,9 @@
 import json
 
 import pytest
+import redis
 
-from app import cache, db
+from app import cache, db, orders
 
 
 @pytest.fixture
@@ -72,7 +73,6 @@ def test_static_files_do_not_expose_php(client):
     assert client.get('/css/main.css').status_code == 200
     assert client.get('/index.php').status_code == 404
     assert client.get('/index.php.bak-20261019').status_code == 404
-    assert client.get('/images/sort_both.png').status_code == 200
     for icon in ('/favicon.ico', '/favicon.svg', '/apple-touch-icon.png'):
         assert client.get(icon).status_code == 200
 
@@ -110,3 +110,33 @@ def test_live_routes(client, path):
     r = client.get(path)
     assert r.status_code == 200
     assert r.headers['Cache-Control'] == 'public, max-age=300'
+
+
+class _FakeRedis:
+    def __init__(self, fail=False):
+        self.data, self.fail = {}, fail
+
+    def get(self, key):
+        if self.fail:
+            raise redis.ConnectionError('down')
+        return self.data.get(key)
+
+    def setex(self, key, ttl, value):
+        if self.fail:
+            raise redis.ConnectionError('down')
+        self.data[key] = str(value)
+
+
+def test_latest_orderset_cached(monkeypatch):
+    fake, queries = _FakeRedis(), []
+    monkeypatch.setattr(cache, 'client', lambda: fake)
+    monkeypatch.setattr(db, 'fetch_one', lambda sql, params=None: queries.append(sql) or {'max': 175493})
+    assert orders.latest_orderset() == 175493
+    assert orders.latest_orderset() == 175493
+    assert len(queries) == 1 and fake.data == {'py:latest_orderset': '175493'}
+
+
+def test_latest_orderset_without_redis(monkeypatch):
+    monkeypatch.setattr(cache, 'client', lambda: _FakeRedis(fail=True))
+    monkeypatch.setattr(db, 'fetch_one', lambda sql, params=None: {'max': 175493})
+    assert orders.latest_orderset() == 175493
