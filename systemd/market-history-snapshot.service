@@ -1,0 +1,12 @@
+[Unit]
+Description=Fuzzwork Market: snapshot New Eden/region/hub aggregates into aggregatehistory
+After=postgresql.service redis-server.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/web/market/pyapp
+EnvironmentFile=/etc/market-python.env
+# Wait for a running loader (it holds this lock) so a snapshot never sees a half-written load.
+ExecStart=/usr/bin/flock -s -w 900 /opt/pricegetter/loadPrices.lock /opt/web/market/pyapp/.venv/bin/python scripts/history.py snapshot

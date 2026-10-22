@@ -1,8 +1,29 @@
 {% extends "base.phtml" %}       
 {% block title %}{{typename}}{% endblock %}
+{% block extrahead %}
+{% if history %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.min.css" integrity="sha384-IfV0B7MIOYuO95kO9G5ySKPz/85zqFNOAs8iy4tkK5zd9izhJAB8b7lHrwYqqmYE" crossorigin="anonymous">
+<script src="https://cdn.jsdelivr.net/npm/uplot@1.6.32/dist/uPlot.iife.min.js" integrity="sha384-Gx3t0zdBAuQOuvvmaLZj7HKEiSgWTAs+VdtNY7wt19QDPTDQjFIwAuXDj0zeN00c" crossorigin="anonymous"></script>
+<script src="/js/history.js" defer></script>
+{% endif %}
+{% endblock %}
 {% block content %}
 <div class="content">
 <h1>{{typename}}</h1>
+{% if history %}
+<div class="pure-g">
+<div class="pure-u-1">
+<h2>Price History</h2>
+{% if history|length > 1 %}
+<label for="historylocation">Hub</label>
+<select id="historylocation">
+{% for location in history %}<option value="{{location.id}}">{{location.name}}</option>{% endfor %}
+</select>
+{% endif %}
+<div id="pricehistory" class="pricehistory" data-type="{{type}}" data-location="{{history[0].id}}"></div>
+</div>
+</div>
+{% endif %}
 <div class="pure-g">
 <div class="pure-u-1">
 <a name="sell"></a>

@@ -1,0 +1,9 @@
+[Unit]
+Description=Snapshot market aggregates four times a day (about 14 minutes after a load)
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:20:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

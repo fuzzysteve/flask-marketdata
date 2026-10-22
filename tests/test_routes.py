@@ -140,3 +140,24 @@ def test_latest_orderset_without_redis(monkeypatch):
     monkeypatch.setattr(cache, 'client', lambda: _FakeRedis(fail=True))
     monkeypatch.setattr(db, 'fetch_one', lambda sql, params=None: {'max': 175493})
     assert orders.latest_orderset() == 175493
+
+
+def test_price_history_api(client, monkeypatch):
+    from app import history
+    monkeypatch.setattr(history, 'series', lambda location, typeid: [
+        {'snapshot': '2026-10-22 12:06:00', 'buypercentile': '4.5', 'buymax': '5', 'buyvolume': '100',
+         'buyorders': 2, 'sellpercentile': None, 'sellmin': None, 'sellvolume': None, 'sellorders': None}])
+    r = client.get('/api/history/10000002/34/')
+    assert r.status_code == 200 and r.headers['Access-Control-Allow-Origin'] == '*'
+    data = json.loads(r.data)
+    assert data['location'] == 10000002 and data['typeid'] == 34
+    assert data['history'][0]['buypercentile'] == '4.5'
+
+
+def test_chart_locations(monkeypatch):
+    from app import history
+    monkeypatch.setattr(history, 'hub_locations', lambda: [{'id': 60003760, 'name': 'Jita'}])
+    assert history.chart_locations(0) == [{'id': 0, 'name': ''}]
+    assert history.chart_locations(10000002) == [{'id': 10000002, 'name': ''}]
+    assert history.chart_locations(60003760) == [{'id': 60003760, 'name': 'Jita'}]
+    assert history.chart_locations(60000001) == []

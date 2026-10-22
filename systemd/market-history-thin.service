@@ -1,0 +1,11 @@
+[Unit]
+Description=Fuzzwork Market: thin aggregatehistory months older than a year to one snapshot a day
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/web/market/pyapp
+EnvironmentFile=/etc/market-python.env
+ExecStart=/opt/web/market/pyapp/.venv/bin/python scripts/history.py thin

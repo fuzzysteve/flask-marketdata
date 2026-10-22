@@ -3,6 +3,7 @@ import json
 from flask import Blueprint, render_template
 
 from .. import cache, db, orders
+from ..history import chart_locations, hub_locations
 
 bp = Blueprint('pages', __name__)
 
@@ -45,7 +46,7 @@ def plex():
     # the newest orderset that actually has PLEX data rather than the global max.
     orderset = db.fetch_one('select max("orderSet") from orders where "typeID"=%(typeid)s',
                             {'typeid': PLEX})['max']
-    return render_template('type.phtml',
+    return render_template('type.phtml', history=chart_locations(0),
                            **orders.type_page_args(PLEX, orderset=orderset, typename='PLEX'))
 
 
@@ -86,12 +87,13 @@ def browser():
 
 @bp.route('/type/<int:typeid>/')
 def type_orders(typeid):
-    return render_template('type.phtml', **orders.type_page_args(typeid))
+    return render_template('type.phtml', history=chart_locations(0),
+                           **orders.type_page_args(typeid))
 
 
 @bp.route('/region/<int:region>/type/<int:typeid>/')
 def region_type(region, typeid):
-    return render_template('type.phtml', **orders.type_page_args(
+    return render_template('type.phtml', history=chart_locations(region), **orders.type_page_args(
         typeid, where='AND region=%(region)s', params={'region': region}))
 
 
@@ -104,13 +106,13 @@ def empire_type(typeid):
 
 @bp.route('/hub/type/<int:typeid>/')
 def hub_type(typeid):
-    return render_template('type.phtml', **orders.type_page_args(
+    return render_template('type.phtml', history=hub_locations(), **orders.type_page_args(
         typeid, join='join hubstations on orders."stationID"=hubstations.stationID'))
 
 
 @bp.route('/station/<int:station>/type/<int:typeid>/')
 def station_type(station, typeid):
-    return render_template('type.phtml', **orders.type_page_args(
+    return render_template('type.phtml', history=chart_locations(station), **orders.type_page_args(
         typeid, where='AND orders."stationID"=%(station)s', params={'station': station}))
 
 

@@ -68,3 +68,5 @@ a:active { color: var(--color-link); text-decoration: underline;}
 
 .pasteblock { margin:auto;width:70%}
 .pasteblock textarea {width:100%}
+.pricehistory { min-height: 2em; margin-bottom: 1em; }
+.pricehistory .u-legend { font-family: 'Source Code Pro'; }

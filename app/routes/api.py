@@ -2,7 +2,7 @@ import glob
 
 from flask import Blueprint, redirect, render_template, request
 
-from .. import ORDERBOOK_DIR, cache, db, json_response, orders, phpcompat
+from .. import ORDERBOOK_DIR, cache, db, history, json_response, orders, phpcompat
 from .pages import REGION_LIST_SQL
 
 bp = Blueprint('api', __name__)
@@ -123,6 +123,16 @@ def region_type(region, typeid):
     buyorders = db.fetch_all(_API_ORDER_SQL.format(range='range,', buy='True', direction='desc'), params)
     return json_response({'typename': orders.type_name(typeid), 'orderset': orderset,
                           'buyorders': buyorders, 'sellorders': sellorders}, expires_in=300)
+
+
+@bp.route('/api/history/<int:location>/<int:typeid>/')
+def price_history(location, typeid):
+    # location: 0 (New Eden), a region or a trade hub station. Snapshots are taken
+    # four times a day; months over a year old keep one a day.
+    response = json_response({'location': location, 'typeid': typeid,
+                              'history': history.series(location, typeid)}, expires_in=1800)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
 
 
 @bp.route('/api/')

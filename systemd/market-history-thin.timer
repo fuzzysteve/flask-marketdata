@@ -1,0 +1,8 @@
+[Unit]
+Description=Thin old market history daily (a no-op until a month is over a year old)
+
+[Timer]
+OnCalendar=*-*-* 03:50:00
+
+[Install]
+WantedBy=timers.target
