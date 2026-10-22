@@ -92,14 +92,19 @@
             plot.setSize({width: el.clientWidth, height: 300});
         }
     });
-    // Axis colours come from the theme, so redraw when it is toggled.
+    // Axis colours come from the theme, so redraw when it is toggled or the
+    // system setting changes.
+    function redraw() {
+        if (lastData) {
+            draw(lastData);
+        }
+    }
     var toggle = document.getElementById('theme-toggle');
     if (toggle) {
-        toggle.addEventListener('click', function() {
-            if (lastData) {
-                draw(lastData);
-            }
-        });
+        toggle.addEventListener('click', redraw);
+    }
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
     }
     load(el.dataset.location);
 })();

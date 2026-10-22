@@ -5,6 +5,9 @@
     --color-table-stripe: #E5E5E5;
     --color-table-border: #222222;
     --color-fixedbutton-bg: lightgray;
+    /* Native controls (select, input, textarea, scrollbars) follow the theme;
+       pure.css gives them color:inherit, so without this they are light text on white. */
+    color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -15,6 +18,7 @@
         --color-table-stripe: #262626;
         --color-table-border: #555555;
         --color-fixedbutton-bg: #333333;
+        color-scheme: dark;
     }
 }
 
@@ -25,6 +29,7 @@
     --color-table-stripe: #262626;
     --color-table-border: #555555;
     --color-fixedbutton-bg: #333333;
+    color-scheme: dark;
 }
 
 html, button, input, select, textarea, .pure-g [class *= "pure-u"] {font-family: 'Electrolize', sans-serif !important;}
