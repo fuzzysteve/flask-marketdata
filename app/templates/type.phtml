@@ -20,7 +20,17 @@
 {% for location in history %}<option value="{{location.id}}">{{location.name}}</option>{% endfor %}
 </select>
 {% endif %}
+<div class="historycontrols">
+<span class="historyranges" role="group" aria-label="Time range">
+<button type="button" data-days="7">1W</button><button type="button" data-days="30">1M</button><button type="button" data-days="90" class="active" aria-pressed="true">3M</button><button type="button" data-days="182">6M</button><button type="button" data-days="365">1Y</button><button type="button" data-days="0">All</button>
+</span>
+<label><input type="checkbox" id="historylog"> Log scale</label>
+<label><input type="checkbox" id="historyvolume"> Volume on market</label>
+<button type="button" id="historycsv">Download CSV</button>
+</div>
 <div id="pricehistory" class="pricehistory" data-type="{{type}}" data-location="{{history[0].id}}"></div>
+<div id="historyvolumechart" class="pricehistory" hidden></div>
+<p class="historyhint">Drag across the chart to zoom in, double-click to reset. Click a legend item to hide or show that line.</p>
 </div>
 </div>
 {% endif %}

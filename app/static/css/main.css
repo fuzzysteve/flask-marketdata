@@ -75,3 +75,9 @@ a:active { color: var(--color-link); text-decoration: underline;}
 .pasteblock textarea {width:100%}
 .pricehistory { min-height: 2em; margin-bottom: 1em; }
 .pricehistory .u-legend { font-family: 'Source Code Pro'; }
+.historycontrols { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 0.5em 0; }
+.historycontrols button { font-size: 0.9em; padding: 4px 10px; cursor: pointer; color: var(--color-text);
+    background: var(--color-table-stripe); border: 1px solid var(--color-table-border); }
+.historyranges button + button { border-left: none; }
+.historycontrols button.active { background: var(--color-text); color: var(--color-bg); }
+.historyhint { font-size: 0.85em; opacity: 0.8; margin: 0 0 1em; }
