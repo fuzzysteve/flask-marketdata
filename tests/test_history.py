@@ -87,8 +87,9 @@ def scratch_schema(monkeypatch):
 def test_thin_keeps_first_snapshot_per_day(scratch_schema):
     conn = scratch_schema
     history.ensure_schema(conn)
-    old = [datetime.datetime(2025, 3, day, hour, 6) for day in (1, 2) for hour in (0, 6, 12, 18)]
-    recent = [datetime.datetime(2026, 10, 21, hour, 6) for hour in (0, 6)]
+    # 2020 dates: partition names that real data will never use.
+    old = [datetime.datetime(2020, 3, day, hour, 6) for day in (1, 2) for hour in (0, 6, 12, 18)]
+    recent = [datetime.datetime(2021, 10, 21, hour, 6) for hour in (0, 6)]
     for when in old + recent:
         history.ensure_partition(conn, when)
         conn.execute('insert into aggregatehistory_runs values (%(s)s, 1, 2)', {'s': when})
@@ -96,19 +97,19 @@ def test_thin_keeps_first_snapshot_per_day(scratch_schema):
             conn.execute('insert into aggregatehistory (snapshot, location, "typeID", sellpercentile) '
                          'values (%(s)s, 0, %(t)s, 4.0)', {'s': when, 't': typeid})
 
-    assert history.thin(now=datetime.datetime(2026, 10, 22)) == ['aggregatehistory_202503']
+    assert history.thin(now=datetime.datetime(2021, 10, 22)) == ['aggregatehistory_202003']
 
     kept = [row['snapshot'] for row in conn.execute(
-        'select distinct snapshot from aggregatehistory_202503 order by 1').fetchall()]
-    assert kept == ['2025-03-01 00:06:00', '2025-03-02 00:06:00']
+        'select distinct snapshot from aggregatehistory_202003 order by 1').fetchall()]
+    assert kept == ['2020-03-01 00:06:00', '2020-03-02 00:06:00']
     assert conn.execute('select count(*) from aggregatehistory').fetchone()['count'] == 8
     assert conn.execute('select count(*) from aggregatehistory_runs').fetchone()['count'] == 4
     # Still attached, with its primary key, and a second run has nothing to do.
-    assert conn.execute("select count(*) from pg_inherits where inhrelid='aggregatehistory_202503'::regclass"
+    assert conn.execute("select count(*) from pg_inherits where inhrelid='history_test.aggregatehistory_202003'::regclass"
                         ).fetchone()['count'] == 1
-    assert conn.execute("select count(*) from pg_indexes where tablename='aggregatehistory_202503'"
+    assert conn.execute("select count(*) from pg_indexes where schemaname='history_test' and tablename='aggregatehistory_202003'"
                         ).fetchone()['count'] == 1
-    assert history.thin(now=datetime.datetime(2026, 10, 22)) == []
+    assert history.thin(now=datetime.datetime(2021, 10, 22)) == []
 
 
 def test_aggregate_levels_matches_loader_maths():
