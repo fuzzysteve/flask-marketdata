@@ -23,6 +23,21 @@
         return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     }
 
+    // Dates are year-month-day in UTC (EVE time), whatever the viewer's locale.
+    function pad(n) {
+        return n < 10 ? '0' + n : String(n);
+    }
+
+    function ymd(seconds) {
+        var d = new Date(seconds * 1000);
+        return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
+    }
+
+    function hm(seconds) {
+        var d = new Date(seconds * 1000);
+        return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes());
+    }
+
     function price(u, value) {
         return value === null || value === undefined ? '-' : full.format(value);
     }
@@ -56,15 +71,19 @@
         var opts = {
             width: el.clientWidth,
             height: 300,
+            // Place ticks on UTC day boundaries rather than the viewer's local midnight.
+            tzDate: function(ts) { return uPlot.tzDate(new Date(ts * 1000), 'Etc/UTC'); },
             series: [
-                {},
+                {label: 'Time (UTC)', value: function(u, ts) { return ts === null ? '-' : ymd(ts) + ' ' + hm(ts); }},
                 {label: 'Sell (lowest 5%)', stroke: SELL, width: 2, points: points, value: price},
                 {label: 'Min sell', stroke: SELL, width: 1, dash: [4, 4], points: points, value: price},
                 {label: 'Buy (highest 5%)', stroke: BUY, width: 2, points: points, value: price},
                 {label: 'Max buy', stroke: BUY, width: 1, dash: [4, 4], points: points, value: price}
             ],
             axes: [
-                axis,
+                Object.assign({}, axis, {space: 90, values: function(u, splits, axisIdx, space, incr) {
+                    return splits.map(function(ts) { return incr < 86400 ? ymd(ts) + ' ' + hm(ts) : ymd(ts); });
+                }}),
                 Object.assign({}, axis, {size: 70, values: function(u, values) {
                     return values.map(function(v) { return compact.format(v); });
                 }})

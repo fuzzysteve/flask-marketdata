@@ -159,3 +159,11 @@ def test_record_copy_text_round_trips(scratch_schema):
     assert float(rows[(0, 35)]['sellpercentile']) == 0.1 + 0.2
     assert rows[(0, 35)]['buypercentile'] is None and rows[(0, 35)]['buyorders'] is None
     assert conn.execute('select "orderSet", rows from aggregatehistory_runs').fetchone() == {'orderSet': 99, 'rows': 2}
+
+
+def test_backfill_plan_never_uses_an_orderset_twice():
+    t = lambda h, m: datetime.datetime(2026, 3, 1, h, m)
+    # One dump a day, at 09:06: within 3 hours of both the 06:06 and 12:06 slots.
+    plan = history.backfill_plan([(7, t(9, 6))], recorded=set(), start=t(0, 0),
+                                 end=datetime.datetime(2026, 3, 2), tolerance=datetime.timedelta(hours=3))
+    assert plan == [(t(9, 6), 7)]

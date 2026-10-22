@@ -318,10 +318,11 @@ SNAPSHOT_HOURS = (0, 6, 12, 18)
 SLOT_TOLERANCE = datetime.timedelta(minutes=40)
 
 
-def backfill_plan(ordersets, recorded, start, end):
+def backfill_plan(ordersets, recorded, start, end, tolerance=SLOT_TOLERANCE):
     """[(when, orderset id)] picking, for each 00/06/12/18:06 slot in [start, end),
-    the orderset downloaded nearest to it, skipping slots already recorded."""
-    plan = []
+    the orderset downloaded nearest to it (within `tolerance`), skipping slots
+    already recorded. An orderset is never used for two slots."""
+    plan, used = [], set(recorded)
     day = datetime.datetime(start.year, start.month, start.day)
     while day < end:
         for hour in SNAPSHOT_HOURS:
@@ -329,8 +330,9 @@ def backfill_plan(ordersets, recorded, start, end):
             if not start <= slot < end:
                 continue
             nearest = min(ordersets, key=lambda o: abs(o[1] - slot), default=None)
-            if nearest and abs(nearest[1] - slot) <= SLOT_TOLERANCE and nearest[0] not in recorded:
+            if nearest and abs(nearest[1] - slot) <= tolerance and nearest[0] not in used:
                 plan.append((nearest[1], nearest[0]))
+                used.add(nearest[0])
         day += datetime.timedelta(days=1)
     return plan
 
@@ -340,8 +342,8 @@ def _aggregate_dump(path, when, locations):
     return copy_text(when, found), len(found)
 
 
-def backfill(days=30, workers=4, orderbook_dir=None):
-    """Fill the last `days` days from the order book dumps, skipping ordersets
+def backfill(days=30, workers=4, orderbook_dir=None, start=None, end=None, tolerance=SLOT_TOLERANCE):
+    """Fill [start, end) (default: the last `days` days) from the order book dumps, skipping ordersets
     already recorded (live or by an earlier, possibly interrupted, backfill).
     Redis and the orders tables are only read, never written."""
     import concurrent.futures
@@ -351,14 +353,14 @@ def backfill(days=30, workers=4, orderbook_dir=None):
     with db.pool().connection() as conn:
         ensure_schema(conn)
         recorded = {row['orderSet'] for row in conn.execute('select "orderSet" from aggregatehistory_runs')}
-    end = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
-    start = end - datetime.timedelta(days=days)
+    end = end or datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    start = start or end - datetime.timedelta(days=days)
     ordersets = [(row['id'], _timestamp(row['downloaded']))
                  for row in db.fetch_all('select id, downloaded from orderset where downloaded>=%(lo)s and downloaded<%(hi)s',
                                          {'lo': start - SLOT_TOLERANCE, 'hi': end + SLOT_TOLERANCE})]
     ordersets = [(orderset_id, when) for orderset_id, when in ordersets
                  if os.path.exists(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz')]
-    plan = backfill_plan(ordersets, recorded, start, end)
+    plan = backfill_plan(ordersets, recorded, start, end, tolerance)
     log.info('backfilling %s snapshots from %s to %s', len(plan), start, end)
     locations = {int(location) for location in _locations()}
     # Keep only a few results in flight: each is ~25 MB, and an unbounded queue
