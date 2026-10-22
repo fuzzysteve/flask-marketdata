@@ -48,7 +48,7 @@
         $( "#stationid" ).val(ui.item.label);
         window.stationid=ui.item.value;
         if (window.typeid > 0  & window.stationid> 0) {
-            window.location="/station/"+window.stationid+"/type/"+ui.item.value+"/"
+            window.location="/station/"+window.stationid+"/type/"+window.typeid+"/"
         }
       }
     });
