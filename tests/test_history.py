@@ -132,10 +132,11 @@ def test_aggregate_orderbook_groups_new_eden_regions_and_hubs():
 
 def test_backfill_plan_picks_nearest_orderset_per_slot():
     t = lambda h, m: datetime.datetime(2026, 10, 1, h, m)
-    ordersets = [(1, t(0, 6)), (2, t(0, 36)), (3, t(6, 36)), (4, t(12, 6)), (5, t(18, 6))]
+    ordersets = [(1, t(0, 6)), (2, t(0, 36)), (3, t(6, 50)), (4, t(12, 36)), (5, t(18, 6))]
     plan = [o for _, o in history.backfill_plan(
         ordersets, recorded={5}, start=t(0, 0), end=datetime.datetime(2026, 10, 2))]
-    # 06:06 has no orderset within 20 minutes (06:36 is 30 away); 18:06 is already recorded.
+    # 06:06 has nothing within 40 minutes (06:50 is 44 away); 12:06 falls back to the
+    # 12:36 load; 18:06 is already recorded.
     assert plan == [1, 4]
 
 

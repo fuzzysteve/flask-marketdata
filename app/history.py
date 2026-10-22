@@ -300,8 +300,8 @@ def record(when, orderset_id, found):
 
 SNAPSHOT_HOURS = (0, 6, 12, 18)
 # Loads start at :06 and :36, so the orderset for an 00:06 slot is normally
-# exactly there; allow a little drift or a skipped load.
-SLOT_TOLERANCE = datetime.timedelta(minutes=20)
+# exactly there. If that load (or its dump) is missing, the :36 either side will do.
+SLOT_TOLERANCE = datetime.timedelta(minutes=40)
 
 
 def backfill_plan(ordersets, recorded, start, end):
@@ -343,8 +343,9 @@ def backfill(days=30, workers=4, orderbook_dir=None):
     ordersets = [(row['id'], _timestamp(row['downloaded']))
                  for row in db.fetch_all('select id, downloaded from orderset where downloaded>=%(lo)s and downloaded<%(hi)s',
                                          {'lo': start - SLOT_TOLERANCE, 'hi': end + SLOT_TOLERANCE})]
-    plan = [(when, orderset_id) for when, orderset_id in backfill_plan(ordersets, recorded, start, end)
-            if os.path.exists(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz')]
+    ordersets = [(orderset_id, when) for orderset_id, when in ordersets
+                 if os.path.exists(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz')]
+    plan = backfill_plan(ordersets, recorded, start, end)
     log.info('backfilling %s snapshots from %s to %s', len(plan), start, end)
     locations = {int(location) for location in _locations()}
     jobs = [(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz', locations) for _, orderset_id in plan]
