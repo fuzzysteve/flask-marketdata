@@ -109,3 +109,36 @@ def test_thin_keeps_first_snapshot_per_day(scratch_schema):
     assert conn.execute("select count(*) from pg_indexes where tablename='aggregatehistory_202503'"
                         ).fetchone()['count'] == 1
     assert history.thin(now=datetime.datetime(2026, 10, 22)) == []
+
+
+def test_aggregate_levels_matches_loader_maths():
+    # Sell: 100 units at 10, 900 at 11, and an outlier >100x the minimum whose
+    # volume is ignored. 5% of 1000 = 50 units, all at 10.
+    assert history.aggregate_levels({10.0: 100, 11.0: 900, 2000.0: 5}, buy=False) == (10.0, 2000.0, 10.0, 1000.0, 3)
+    # Buy: best first. 5% of 400 = 20: 10 at 9.0 then 10 of the 390 at 8.0.
+    pct, high, low, volume, orders = history.aggregate_levels({9.0: 10, 8.0: 390}, buy=True)
+    assert (pct, high, low, volume, orders) == (8.5, 9.0, 8.0, 400.0, 2)
+
+
+def test_aggregate_orderbook_groups_new_eden_regions_and_hubs():
+    orders = [(34, False, 5.0, 10, 60003760, 10000002), (34, False, 5.0, 5, 60003760, 10000002),
+              (34, False, 6.0, 1, 60000001, 10000002), (34, True, 4.0, 7, 60008494, 10000043)]
+    found = history.aggregate_orderbook(orders, {0, 10000002, 10000043, 60003760, 60008494})
+    assert found[(60003760, 34)]['false'][3:] == (15.0, 1)      # two orders, one price level
+    assert found[(10000002, 34)]['false'][3:] == (16.0, 2)
+    assert found[(0, 34)]['true'][1] == 4.0 and found[(0, 34)]['false'][2] == 5.0
+    assert (60000001, 34) not in found
+
+
+def test_backfill_plan_picks_nearest_orderset_per_slot():
+    t = lambda h, m: datetime.datetime(2026, 10, 1, h, m)
+    ordersets = [(1, t(0, 6)), (2, t(0, 36)), (3, t(6, 36)), (4, t(12, 6)), (5, t(18, 6))]
+    plan = [o for _, o in history.backfill_plan(
+        ordersets, recorded={5}, start=t(0, 0), end=datetime.datetime(2026, 10, 2))]
+    # 06:06 has no orderset within 20 minutes (06:36 is 30 away); 18:06 is already recorded.
+    assert plan == [1, 4]
+
+
+def test_timestamp_accepts_postgres_text():
+    assert history._timestamp('2026-09-23 00:06:00.64108') == datetime.datetime(2026, 9, 23, 0, 6)
+    assert history._timestamp('2026-09-23 00:06:00') == datetime.datetime(2026, 9, 23, 0, 6)

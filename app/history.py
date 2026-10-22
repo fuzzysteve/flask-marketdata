@@ -6,6 +6,7 @@ month is thinned to the first snapshot of each UTC day. The table is
 partitioned by month, so thinning rebuilds one partition and swaps it in,
 which returns the space without a VACUUM FULL on the live table."""
 import datetime
+import gzip
 import logging
 
 from . import cache, db
@@ -81,6 +82,12 @@ def _locations():
     return {str(location) for location in [0] + regions + hubs}
 
 
+def _timestamp(text):
+    # Timestamps arrive as text (db.py) with trailing zeros of the fraction
+    # dropped ('...:00.64108'), which fromisoformat() rejects before Python 3.11.
+    return datetime.datetime.strptime(text[:19], '%Y-%m-%d %H:%M:%S')
+
+
 def _number(value, cast=float):
     try:
         return cast(float(value))
@@ -130,7 +137,7 @@ def rows_for(snapshot, found):
 def snapshot():
     """Record the current aggregates once per orderset. Returns rows written."""
     orderset = db.fetch_one('select id, downloaded from orderset order by id desc limit 1')
-    when = datetime.datetime.fromisoformat(orderset['downloaded']).replace(microsecond=0)
+    when = _timestamp(orderset['downloaded'])
     with db.pool().connection() as conn:
         ensure_schema(conn)
         if conn.execute('select 1 from aggregatehistory_runs where "orderSet"=%(id)s',
@@ -147,14 +154,9 @@ def snapshot():
     if not found:
         raise RuntimeError(f'no fresh aggregates for orderset {orderset["id"]}')
 
-    with db.pool().connection() as conn, conn.transaction():
-        ensure_partition(conn, when)
+    with db.pool().connection() as conn:
         ensure_partition(conn, _next_month(_month_start(when)))
-        with conn.cursor().copy(f'copy aggregatehistory ({",".join(_COLUMNS)}) from stdin') as copy:
-            for row in rows_for(when, found):
-                copy.write_row(row)
-        conn.execute('insert into aggregatehistory_runs (snapshot,"orderSet",rows) '
-                     'values (%(s)s,%(id)s,%(rows)s)', {'s': when, 'id': orderset['id'], 'rows': len(found)})
+    record(when, orderset['id'], found)
     log.info('recorded %s aggregates for orderset %s (%s)', len(found), orderset['id'], when)
     return len(found)
 
@@ -234,3 +236,120 @@ def chart_locations(location, name=''):
     if location == 0 or 10000000 <= location < 11000000:
         return [{'id': location, 'name': name}]
     return [hub for hub in hub_locations() if hub['id'] == location]
+
+
+# Backfill from the order book dumps (/opt/orderbooks/orderset-<id>.csv.gz),
+# recomputing what aggloader-esi.py would have put in Redis for that orderset.
+
+def read_orderbook(path):
+    """Yield (typeID, buy, price, volume, stationID, region) from an order book
+    dump, which has the columns of the loader's COPY into orders."""
+    with gzip.open(path, 'rt') as f:
+        for line in f:
+            fields = line.rstrip('\n').split('\t')
+            yield (int(fields[1]), fields[3] == 'True', float(fields[7]), int(fields[4]),
+                   int(fields[8]), int(fields[11]))
+
+
+def aggregate_levels(levels, buy):
+    """(percentile, max, min, volume, orderCount) for one location/type/side, the
+    way aggloader-esi.py computes it: over price levels (volume summed per price),
+    ignoring volume more than 100x off the best price, with the percentile the
+    volume-weighted price of the best 5% of that volume."""
+    prices = sorted(levels, reverse=buy)
+    best = prices[0]
+    volumes = [levels[p] if (p >= best / 100 if buy else p <= best * 100) else 0 for p in prices]
+    total = sum(volumes)
+    five = total / 20
+    applies, cumsum, last = [], 0, 0
+    for volume in volumes:
+        cumsum += volume
+        applies.append(max(volume if cumsum <= five else five - last, 0))
+        last = cumsum
+    if sum(applies) == 0:
+        applies = [0.01] * len(prices)
+    percentile = sum(p * a for p, a in zip(prices, applies)) / sum(applies)
+    return percentile, max(prices), min(prices), float(total), len(prices)
+
+
+def aggregate_orderbook(orders, locations):
+    """{(location, typeID): {'true': fields, 'false': fields}}, the shape collect()
+    returns, for New Eden (0), regions and stations in `locations`."""
+    levels = {}
+    for typeid, buy, price, volume, station, region in orders:
+        for location in (0, region, station):
+            if location in locations:
+                side = levels.setdefault((location, typeid, buy), {})
+                side[price] = side.get(price, 0) + volume
+    found = {}
+    for (location, typeid, buy), side in levels.items():
+        found.setdefault((location, typeid), {})['true' if buy else 'false'] = aggregate_levels(side, buy)
+    return found
+
+
+def record(when, orderset_id, found):
+    """Write one snapshot (rows and its run) in a transaction."""
+    with db.pool().connection() as conn, conn.transaction():
+        ensure_partition(conn, when)
+        with conn.cursor().copy(f'copy aggregatehistory ({",".join(_COLUMNS)}) from stdin') as copy:
+            for row in rows_for(when, found):
+                copy.write_row(row)
+        conn.execute('insert into aggregatehistory_runs (snapshot,"orderSet",rows) '
+                     'values (%(s)s,%(id)s,%(rows)s)', {'s': when, 'id': orderset_id, 'rows': len(found)})
+
+
+SNAPSHOT_HOURS = (0, 6, 12, 18)
+# Loads start at :06 and :36, so the orderset for an 00:06 slot is normally
+# exactly there; allow a little drift or a skipped load.
+SLOT_TOLERANCE = datetime.timedelta(minutes=20)
+
+
+def backfill_plan(ordersets, recorded, start, end):
+    """[(when, orderset id)] picking, for each 00/06/12/18:06 slot in [start, end),
+    the orderset downloaded nearest to it, skipping slots already recorded."""
+    plan = []
+    day = datetime.datetime(start.year, start.month, start.day)
+    while day < end:
+        for hour in SNAPSHOT_HOURS:
+            slot = day + datetime.timedelta(hours=hour, minutes=6)
+            if not start <= slot < end:
+                continue
+            nearest = min(ordersets, key=lambda o: abs(o[1] - slot), default=None)
+            if nearest and abs(nearest[1] - slot) <= SLOT_TOLERANCE and nearest[0] not in recorded:
+                plan.append((nearest[1], nearest[0]))
+        day += datetime.timedelta(days=1)
+    return plan
+
+
+def _aggregate_dump(job):
+    path, locations = job
+    return aggregate_orderbook(read_orderbook(path), locations)
+
+
+def backfill(days=30, workers=4, orderbook_dir=None):
+    """Fill the last `days` days from the order book dumps, up to the first live
+    snapshot. Redis and the orders tables are only read, never written."""
+    import concurrent.futures
+    import os
+    from . import ORDERBOOK_DIR
+    orderbook_dir = orderbook_dir or ORDERBOOK_DIR
+    with db.pool().connection() as conn:
+        ensure_schema(conn)
+        runs = conn.execute('select snapshot, "orderSet" from aggregatehistory_runs').fetchall()
+    recorded = {row['orderSet'] for row in runs}
+    now = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    start = now - datetime.timedelta(days=days)
+    end = min([_timestamp(row['snapshot']) for row in runs] + [now])
+    ordersets = [(row['id'], _timestamp(row['downloaded']))
+                 for row in db.fetch_all('select id, downloaded from orderset where downloaded>=%(lo)s and downloaded<%(hi)s',
+                                         {'lo': start - SLOT_TOLERANCE, 'hi': end + SLOT_TOLERANCE})]
+    plan = [(when, orderset_id) for when, orderset_id in backfill_plan(ordersets, recorded, start, end)
+            if os.path.exists(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz')]
+    log.info('backfilling %s snapshots from %s to %s', len(plan), start, end)
+    locations = {int(location) for location in _locations()}
+    jobs = [(f'{orderbook_dir}/orderset-{orderset_id}.csv.gz', locations) for _, orderset_id in plan]
+    with concurrent.futures.ProcessPoolExecutor(workers) as pool:
+        for (when, orderset_id), found in zip(plan, pool.map(_aggregate_dump, jobs)):
+            record(when, orderset_id, found)
+            log.info('backfilled orderset %s (%s): %s aggregates', orderset_id, when, len(found))
+    return len(plan)

@@ -34,7 +34,8 @@ Flask port of the Fuzzwork Market PHP (Slim 3) site. It went live on market.fuzz
   - Only keys with more than an hour of their 90-minute TTL left are taken (written by the latest load). A snapshot with under half the previous run's rows fails instead of recording.
   - The snapshot time is the orderset's `downloaded` time. A run for an orderset that's already recorded is a no-op.
   - Thinning: once a month ended over a year ago it is rebuilt keeping the first snapshot of each UTC day and swapped in (detach/attach), which frees the space without `VACUUM FULL`.
-  - Storage: about 205k rows (~30 MB) per snapshot, so ~43 GB for the first year at 4/day, then ~11 GB per extra year.
+  - Storage (measured): about 288k rows, 37 MB with the index, per snapshot. That is ~54 GB for the first year at 4/day, then ~13.5 GB per extra year once thinned.
+  - Backfill: `scripts/history.py backfill --days N` recomputes past snapshots from the `/opt/orderbooks/orderset-<id>.csv.gz` dumps in Python (a port of `aggloader-esi.py`'s pandas maths, checked to match its Redis output exactly). It never touches Redis or the orders tables. 2026-09-22 12:06 to 2026-10-22 06:06 was backfilled this way.
   - `/api/history/<location>/<typeID>/` serves it. Charts are on the type (New Eden), PLEX, region, hub (with a hub picker) and hub-station pages.
 - **Public repository.** Never commit credentials. Configuration comes from environment variables (see README).
 - **Style:** match the surrounding code. SQL stays close to the original queries, with psycopg `%(name)s` parameters.
