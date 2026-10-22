@@ -5,6 +5,10 @@ workers = int(os.environ.get('WORKERS', 4))
 # Preload so the random fallback SECRET_KEY is shared by all workers.
 preload_app = True
 timeout = 30
+# API clients send long /aggregates/?types=... URLs (up to ~8k). gunicorn's
+# default (4094) rejected them with 400; 8190 is its maximum short of
+# unlimited and matches nginx's default 8k request-line limit.
+limit_request_line = 8190
 accesslog = 'logs/access.log'
 errorlog = 'logs/error.log'
 pidfile = 'logs/gunicorn.pid'
