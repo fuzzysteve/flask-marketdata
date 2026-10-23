@@ -82,16 +82,26 @@ def orders_for_type(typeid, orderset, join='', where='', params=None):
     return db.fetch_all(sell_sql, params), db.fetch_all(buy_sql, params)
 
 
-def type_page_args(typeid, orderset=None, typename=None, scope='', **query):
-    """scope names the page's location (a region, station, ...) in link previews."""
+def type_page_args(typeid, orderset=None, typename=None, scope='', preview_station=None,
+                   preview_label='', **query):
+    """scope names the page's location (a region, station, ...) in link previews.
+    With preview_station, the preview quotes only that station's orders (Jita on the
+    multi-region pages, whose best prices are often outliers), as preview_label."""
     if orderset is None:
         orderset = latest_orderset()
     sellorders, buyorders = orders_for_type(typeid, orderset, **query)
+    previewsell, previewbuy = sellorders, buyorders
+    if preview_station is not None:
+        previewsell = [order for order in sellorders if order['stationID'] == preview_station]
+        previewbuy = [order for order in buyorders if order['stationID'] == preview_station]
     return {
         'type': typeid,
         'typename': type_name(typeid) if typename is None else typename,
         'typeimage': type_image(typeid),
         'scope': scope,
+        'previewsell': previewsell,
+        'previewbuy': previewbuy,
+        'previewlabel': preview_label if preview_station is not None else '',
         'orderset': orderset,
         'buyorders': buyorders,
         'sellorders': sellorders,

@@ -47,7 +47,8 @@ def plex():
     orderset = db.fetch_one('select max("orderSet") from orders where "typeID"=%(typeid)s',
                             {'typeid': PLEX})['max']
     return render_template('type.phtml', history=chart_locations(0),
-                           **orders.type_page_args(PLEX, orderset=orderset, typename='PLEX', scope='New Eden'))
+                           **orders.type_page_args(PLEX, orderset=orderset, typename='PLEX', scope='New Eden',
+                                                   preview_station=JITA_44, preview_label='Jita 4-4'))
 
 
 @bp.route('/type/')
@@ -88,7 +89,8 @@ def browser():
 @bp.route('/type/<int:typeid>/')
 def type_orders(typeid):
     return render_template('type.phtml', history=chart_locations(0),
-                           **orders.type_page_args(typeid, scope='New Eden'))
+                           **orders.type_page_args(typeid, scope='New Eden',
+                                                   preview_station=JITA_44, preview_label='Jita 4-4'))
 
 
 @bp.route('/region/<int:region>/type/<int:typeid>/')
@@ -108,7 +110,7 @@ def empire_type(typeid):
 @bp.route('/hub/type/<int:typeid>/')
 def hub_type(typeid):
     return render_template('type.phtml', history=hub_locations(), **orders.type_page_args(
-        typeid, scope='Trade hubs',
+        typeid, scope='Trade hubs', preview_station=JITA_44, preview_label='Jita 4-4',
         join='join hubstations on orders."stationID"=hubstations.stationID'))
 
 

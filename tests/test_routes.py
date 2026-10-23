@@ -181,3 +181,17 @@ def test_link_preview_tags(client, monkeypatch):
     assert 'content="Sell from 2,500,000.00 ISK (1 order). No buy orders."' in page
     assert 'content="https://images.evetech.net/types/691/bp?size=128"' in page
     assert 'content="https://market.fuzzwork.co.uk/station/60003760/type/691/"' in page
+
+
+def test_link_preview_quotes_jita_on_hub_page(client, monkeypatch):
+    from app.routes import pages
+    monkeypatch.setattr(pages, 'hub_locations', lambda: [])
+    monkeypatch.setattr(orders, 'latest_orderset', lambda: 1)
+    monkeypatch.setattr(orders, 'type_name', lambda typeid: 'Tritanium')
+    monkeypatch.setattr(db, 'fetch_one', lambda sql, params=None: {'categoryID': 4})
+    monkeypatch.setattr(orders, 'orders_for_type', lambda typeid, orderset, **query: (
+        [{'price': '3.15', 'stationID': 60004588, 'stationName': 'Rens'},
+         {'price': '3.90', 'stationID': 60003760, 'stationName': 'Jita'}],
+        [{'price': '3.73', 'stationID': 60005686, 'stationName': 'Hek'}]))
+    page = client.get('/hub/type/34/').data.decode()
+    assert 'content="Jita 4-4: Sell from 3.90 ISK (1 order). No buy orders."' in page

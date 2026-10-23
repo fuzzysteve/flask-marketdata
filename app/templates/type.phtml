@@ -1,8 +1,10 @@
 {% extends "base.phtml" %}       
 {% block title %}{{typename}}{% endblock %}
 {% block embed %}
-{# Link previews (Discord etc.). The station is named unless the page is one station's. #}
-{% set summary %}{% if sellorders %}Sell from {{sellorders[0].price|number_format(2, '.', ',')}} ISK{% if sellorders[0].stationName != scope %} at {{sellorders[0].stationName}}{% endif %} ({{sellorders|length}} order{% if sellorders|length != 1 %}s{% endif %}){% else %}No sell orders{% endif %}. {% if buyorders %}Buy up to {{buyorders[0].price|number_format(2, '.', ',')}} ISK{% if buyorders[0].stationName != scope %} at {{buyorders[0].stationName}}{% endif %} ({{buyorders|length}} order{% if buyorders|length != 1 %}s{% endif %}){% else %}No buy orders{% endif %}.{% endset %}
+{# Link previews (Discord etc.): the best sell and buy, from previewsell/previewbuy (Jita's
+   orders only, as previewlabel, on the New Eden and hub pages). The station is named
+   unless the preview is one station's. #}
+{% set summary %}{% if previewlabel %}{{previewlabel}}: {% endif %}{% if previewsell %}Sell from {{previewsell[0].price|number_format(2, '.', ',')}} ISK{% if not previewlabel and previewsell[0].stationName != scope %} at {{previewsell[0].stationName}}{% endif %} ({{previewsell|length}} order{% if previewsell|length != 1 %}s{% endif %}){% else %}No sell orders{% endif %}. {% if previewbuy %}Buy up to {{previewbuy[0].price|number_format(2, '.', ',')}} ISK{% if not previewlabel and previewbuy[0].stationName != scope %} at {{previewbuy[0].stationName}}{% endif %} ({{previewbuy|length}} order{% if previewbuy|length != 1 %}s{% endif %}){% else %}No buy orders{% endif %}.{% endset %}
 <meta name="description" content="{{summary}}">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Fuzzwork Market Data">
