@@ -1,6 +1,5 @@
 import logging
 import os
-import secrets
 import time
 
 from flask import Flask, Response
@@ -24,14 +23,7 @@ def json_response(data, expires_in=None, status=200):
 def create_app():
     app = Flask(__name__, static_folder=None)
 
-    secret_key = os.environ.get('PYAPP_SECRET_KEY')
-    if not secret_key:
-        app.logger.warning('PYAPP_SECRET_KEY not set; using a random key (sessions reset on restart)')
-        secret_key = secrets.token_hex(32)
     app.config.update(
-        SECRET_KEY=secret_key,
-        SESSION_COOKIE_SECURE=os.environ.get('PYAPP_SECURE_COOKIES', '0') == '1',
-        SESSION_COOKIE_SAMESITE='Lax',
         ALLOW_WRITES=os.environ.get('PYAPP_ALLOW_WRITES', '0') == '1',
     )
 
@@ -51,8 +43,8 @@ def create_app():
             response.headers['Cache-Control'] = 'public, max-age=300'
         return response
 
-    from .routes import api, appraisal, auth, pages, static
-    for module in (pages, api, appraisal, auth, static):
+    from .routes import api, appraisal, pages, static
+    for module in (pages, api, appraisal, static):
         app.register_blueprint(module.bp)
 
     if not app.debug:

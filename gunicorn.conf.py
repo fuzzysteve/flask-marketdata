@@ -2,7 +2,7 @@ import os
 
 bind = f"{os.environ.get('HOST', '127.0.0.1')}:{os.environ.get('PORT', '8001')}"
 workers = int(os.environ.get('WORKERS', 4))
-# Preload so the random fallback SECRET_KEY is shared by all workers.
+# Load the app once in the master and fork the workers from it.
 preload_app = True
 timeout = 30
 # API clients send long /aggregates/?types=... URLs (up to ~8k). gunicorn's

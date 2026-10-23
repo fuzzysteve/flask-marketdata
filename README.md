@@ -24,6 +24,7 @@ git clone https://github.com/fuzzysteve/flask-marketdata.git
 cd flask-marketdata
 python3 -m venv .venv          # Debian/Ubuntu: apt install python3-venv first
 .venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt   # optional: pytest, and requests for scripts/compare.py
 ```
 
 ## Configuration
@@ -37,10 +38,7 @@ All configuration is through environment variables.
 | `MARKETDATA_DB_USER` | `marketdata` | Database user |
 | `MARKETDATA_DB_PASSWORD` | *(empty)* | Database password |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis server |
-| `PYAPP_SECRET_KEY` | random per start | Signs the session cookie used by EVE SSO login. Set this in production. |
 | `PYAPP_ALLOW_WRITES` | `0` | Set to `1` to let the appraisal form save appraisals |
-| `PYAPP_SECURE_COOKIES` | `0` | Set to `1` when served over HTTPS |
-| `PYAPP_EVE_CLIENT_ID` / `PYAPP_EVE_CLIENT_SECRET` | — | EVE SSO application credentials |
 | `PUBLIC_DIR` | `../public` | Directory containing `aggregatecsv.csv.gz` (written by the loaders) |
 | `ORDERBOOK_DIR` | `/opt/orderbooks` | Order book dumps served under `/orderbooks/` |
 | `HOST` / `PORT` | `127.0.0.1` / `8001` | gunicorn bind address |
@@ -52,9 +50,7 @@ Keep production values in a file readable only by the service account, for examp
 `/etc/market-python.env`:
 
 ```sh
-PYAPP_SECRET_KEY=<output of: python3 -c 'import secrets; print(secrets.token_hex(32))'>
 PYAPP_ALLOW_WRITES=1
-PYAPP_SECURE_COOKIES=1
 MARKETDATA_DB_PASSWORD=<password>
 WORKERS=8
 ```

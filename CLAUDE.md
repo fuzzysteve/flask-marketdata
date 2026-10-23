@@ -6,7 +6,7 @@ Flask port of the Fuzzwork Market PHP (Slim 3) site. It went live on market.fuzz
 ## Layout
 
 - `app/__init__.py`: `create_app()`, Jinja filters, default `Cache-Control`, `json_response()`
-- `app/routes/`: blueprints `pages` (HTML), `api` (JSON + `/aggregates/`), `appraisal`, `auth` (EVE SSO), `static`
+- `app/routes/`: blueprints `pages` (HTML), `api` (JSON + `/aggregates/`), `appraisal`, `static`
 - `app/orders.py`: the shared order-book SQL behind the type/region/hub/station/empire/plex pages
 - `app/phpcompat.py`: reproduces PHP/Twig behaviour (`number_format`, `date`, `json_encode`, numeric strings)
 - `app/appraisal_parser.py`: the paste-parsing regex chain
@@ -74,4 +74,4 @@ HTML is sent with `Cache-Control: public, max-age=300`, so reload with the cache
   - Worker processes are tracked by the `gunicorn` group in `/etc/netdata/apps_groups.conf`.
   - nginx timings (`rt=`, `urt=`) and cache status (`cs=`) are parsed by the custom format in `/etc/netdata/python.d/web_log.conf`.
   - The alarm `gunicorn_log_errors` (`/etc/netdata/health.d/gunicorn.conf`) fires on gunicorn critical/error/exception log messages. 5xx responses are covered by the stock web_log `1m_internal_errors` alarm.
-- **EVE SSO credentials:** read from `PYAPP_EVE_CLIENT_ID` / `PYAPP_EVE_CLIENT_SECRET`, falling back to the PHP site's `src/secretreal.php`.
+- **No auth:** the site has no logins or sessions. The EVE SSO routes (`/authlogin`, `/auth/updater`) were removed on 2026-10-23: they exchanged a code and discarded the token. The structure-market loader keeps its own refresh token in `/opt/pricegetter`.

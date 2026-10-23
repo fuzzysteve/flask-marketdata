@@ -62,13 +62,6 @@ def test_appraisal_post_bad_input(client, fake_appraisal):
     assert client.post('/appraisal/', data={'region': '1'}).data == b''
 
 
-def test_oauth_state_check(client):
-    assert client.get('/auth/updater?state=x&code=y').status_code == 403
-    r = client.get('/authlogin')
-    assert r.status_code == 302 and 'state=' in r.headers['Location']
-    assert r.headers['Cache-Control'] == 'no-store'
-
-
 def test_static_files_do_not_expose_php(client):
     assert client.get('/css/main.css').status_code == 200
     assert client.get('/index.php').status_code == 404
