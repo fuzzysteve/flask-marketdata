@@ -19,20 +19,11 @@
 </div>
 {% endblock %}
 {%block footercontent %}
+<script src="/js/autocomplete.js"></script>
   <script>
-  $(function() {
-    $.getJSON( "/api/typeids", function( data ) {
-    $( "#typeid" ).autocomplete({
-      source: data,
-      minLength: 2,
-      select: function( event, ui ) {
-        event.preventDefault();
-        $( "#typeid" ).val(ui.item.label);
-        window.location="/type/"+ui.item.value+"/"
-      }
-    });
+  autocomplete(document.getElementById('typeid'), '/api/typeids', function(item) {
+    window.location="/type/"+item.value+"/"
   });
-});
   </script>
 
 {% endblock %}

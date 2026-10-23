@@ -48,8 +48,12 @@ table {font-family: 'Source Code Pro' !important;}
 .aggregates td {text-align:right; padding:1px;}
 .aggregates tbody tr:nth-child(odd) { background-color: var(--color-table-stripe); }
 .title { text-align:center}
-.ui-autocomplete { max-height: 100px; overflow-y: auto;overflow-x: hidden;  }
-.ui-helper-hidden-accessible { position: absolute; left:-999em; }
+/* The search menus (js/autocomplete.js). */
+.autocomplete { position: absolute; z-index: 300; max-height: 100px; overflow-y: auto; overflow-x: hidden;
+    margin: 0; padding: 0; list-style: none; background: var(--color-bg); color: var(--color-text);
+    border: 1px solid var(--color-table-border); }
+.autocomplete li { padding: 2px 6px; cursor: pointer; white-space: nowrap; }
+.autocomplete li:hover, .autocomplete li[aria-selected="true"] { background: var(--color-table-stripe); }
 .center { text-align:center;}
 .menu-black { background-color:#222222;color:#999999}
 

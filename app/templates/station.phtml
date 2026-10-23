@@ -21,39 +21,24 @@
 </div>
 {% endblock %}
 {%block footercontent %}
+<script src="/js/autocomplete.js"></script>
   <script>
-  $(function() {
-    $( "#typeid" ).val('');
-    $( "#stationid" ).val('');
-    $.getJSON( "/api/typeids", function( data ) {
-    $( "#typeid" ).autocomplete({
-      source: data,
-      minLength: 2,
-      select: function( event, ui ) {
-        event.preventDefault();
-        $( "#typeid" ).val(ui.item.label);
-        window.typeid=ui.item.value;
-        if (window.typeid>0 & window.stationid >0 ) {
-            window.location="/station/"+window.stationid+"/type/"+ui.item.value+"/"
-        }
-      }
-    });
+  var typeid = 0, stationid = 0;
+  document.getElementById('typeid').value = '';
+  document.getElementById('stationid').value = '';
+  function go() {
+    if (typeid > 0 && stationid > 0) {
+      window.location="/station/"+stationid+"/type/"+typeid+"/"
+    }
+  }
+  autocomplete(document.getElementById('typeid'), '/api/typeids', function(item) {
+    typeid = item.value;
+    go();
   });
-    $.getJSON( "/api/stationids", function( data ) {
-    $( "#stationid" ).autocomplete({
-      source: data,
-      minLength: 2,
-      select: function( event, ui ) {
-        event.preventDefault();
-        $( "#stationid" ).val(ui.item.label);
-        window.stationid=ui.item.value;
-        if (window.typeid > 0  & window.stationid> 0) {
-            window.location="/station/"+window.stationid+"/type/"+window.typeid+"/"
-        }
-      }
-    });
+  autocomplete(document.getElementById('stationid'), '/api/stationids', function(item) {
+    stationid = item.value;
+    go();
   });
-});
   </script>
 
 {% endblock %}

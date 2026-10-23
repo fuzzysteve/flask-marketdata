@@ -53,19 +53,9 @@ $(document).ready( function () {
             $('#buytab').toggleClass("selectedtab");
         });
 
-  $(function() {
-    $.getJSON( "/api/typeids", function( data ) {
-    $( "#searchbarInput" ).autocomplete({
-      source: data,
-      minLength: 2,
-      select: function( event, ui ) {
-          event.preventDefault();
-          $( "#searchbarInput" ).val(ui.item.label);
-          loadItem(ui.item.value);
-      }
-    });
+  autocomplete(document.getElementById('searchbarInput'), '/api/typeids', function(item) {
+      loadItem(item.value);
   });
-});
 
 
 

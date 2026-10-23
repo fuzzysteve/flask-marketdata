@@ -21,39 +21,24 @@
 </div>
 {% endblock %}
 {%block footercontent %}
+<script src="/js/autocomplete.js"></script>
   <script>
-  $(function() {
-    $( "#typeid" ).val('');
-    $( "#regionid" ).val('');
-    $.getJSON( "/api/typeids", function( data ) {
-    $( "#typeid" ).autocomplete({
-      source: data,
-      minLength: 2,
-      select: function( event, ui ) {
-        event.preventDefault();
-        $( "#typeid" ).val(ui.item.label);
-        window.typeid=ui.item.value;
-        if (window.typeid>0 & window.regionid >0) {
-            window.location="/region/"+window.regionid+"/type/"+ui.item.value+"/"
-        }
-      }
-    });
+  var typeid = 0, regionid = 0;
+  document.getElementById('typeid').value = '';
+  document.getElementById('regionid').value = '';
+  function go() {
+    if (typeid > 0 && regionid > 0) {
+      window.location="/region/"+regionid+"/type/"+typeid+"/"
+    }
+  }
+  autocomplete(document.getElementById('typeid'), '/api/typeids', function(item) {
+    typeid = item.value;
+    go();
   });
-    $.getJSON( "/api/regionids", function( data ) {
-    $( "#regionid" ).autocomplete({
-      source: data,
-      minLength: 2,
-      select: function( event, ui ) {
-        event.preventDefault();
-        $( "#regionid" ).val(ui.item.label);
-        window.regionid=ui.item.value;
-        if (window.typeid >0 & window.regionid>0) {
-            window.location="/region/"+window.regionid+"/type/"+window.typeid+"/"
-        }
-      }
-    });
+  autocomplete(document.getElementById('regionid'), '/api/regionids', function(item) {
+    regionid = item.value;
+    go();
   });
-});
   </script>
 
 {% endblock %}

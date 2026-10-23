@@ -41,6 +41,15 @@ def test_appraisal_html_and_404s(client, fake_appraisal):
     assert client.get('/appraisal/10000002/nope').status_code == 404
 
 
+def test_libraries_only_where_used(client, fake_appraisal):
+    page = client.get('/appraisal/10000002/abc').data
+    assert b'jquery-3.7.1' in page and b'jquery.dataTables' in page
+    for path in ('/about/', '/type/', '/hub/', '/region/', '/station/'):
+        page = client.get(path).data
+        assert b'jquery' not in page and b'dataTables' not in page, path
+    assert b'/js/autocomplete.js' in page
+
+
 def test_appraisal_post_refused_when_writes_disabled(app, fake_appraisal, monkeypatch):
     app.config['ALLOW_WRITES'] = False
     monkeypatch.setattr(db, 'execute', lambda *a, **k: pytest.fail('must not write'))
