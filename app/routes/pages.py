@@ -47,7 +47,7 @@ def plex():
     orderset = db.fetch_one('select max("orderSet") from orders where "typeID"=%(typeid)s',
                             {'typeid': PLEX})['max']
     return render_template('type.phtml', history=chart_locations(0),
-                           **orders.type_page_args(PLEX, orderset=orderset, typename='PLEX'))
+                           **orders.type_page_args(PLEX, orderset=orderset, typename='PLEX', scope='New Eden'))
 
 
 @bp.route('/type/')
@@ -88,32 +88,35 @@ def browser():
 @bp.route('/type/<int:typeid>/')
 def type_orders(typeid):
     return render_template('type.phtml', history=chart_locations(0),
-                           **orders.type_page_args(typeid))
+                           **orders.type_page_args(typeid, scope='New Eden'))
 
 
 @bp.route('/region/<int:region>/type/<int:typeid>/')
 def region_type(region, typeid):
     return render_template('type.phtml', history=chart_locations(region), **orders.type_page_args(
-        typeid, where='AND region=%(region)s', params={'region': region}))
+        typeid, scope=orders.region_name(region),
+        where='AND region=%(region)s', params={'region': region}))
 
 
 @bp.route('/empire/type/<int:typeid>/')
 def empire_type(typeid):
     return render_template('type.phtml', **orders.type_page_args(
         typeid, join='join "marketRegion" on orders.region="marketRegion".regionid',
-        where='AND regiontype <= 2'))
+        where='AND regiontype <= 2', scope='Empire'))
 
 
 @bp.route('/hub/type/<int:typeid>/')
 def hub_type(typeid):
     return render_template('type.phtml', history=hub_locations(), **orders.type_page_args(
-        typeid, join='join hubstations on orders."stationID"=hubstations.stationID'))
+        typeid, scope='Trade hubs',
+        join='join hubstations on orders."stationID"=hubstations.stationID'))
 
 
 @bp.route('/station/<int:station>/type/<int:typeid>/')
 def station_type(station, typeid):
     return render_template('type.phtml', history=chart_locations(station), **orders.type_page_args(
-        typeid, where='AND orders."stationID"=%(station)s', params={'station': station}))
+        typeid, scope=orders.station_name(station),
+        where='AND orders."stationID"=%(station)s', params={'station': station}))
 
 
 _HISTORY_SQL = '''

@@ -2,6 +2,19 @@
 
 
 {% block title %}Fuzzwork Market Data{% endblock %}
+{% block embed %}
+{# Link previews (Discord etc.). #}
+{% set summary %}EVE Online market data: order books, aggregates, price history and appraisals for every region, the trade hubs and public structures. PLEX in Jita: buy {{plex['true'][0]|number_format(2, '.', ',')}} ISK, sell {{plex['false'][0]|number_format(2, '.', ',')}} ISK.{% endset %}
+<meta name="description" content="{{summary}}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Fuzzwork Market Data">
+<meta property="og:title" content="Fuzzwork Market Data">
+<meta property="og:description" content="{{summary}}">
+<meta property="og:url" content="{{site_url}}/">
+<meta property="og:image" content="{{site_url}}/apple-touch-icon.png">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#2f6fbf">
+{% endblock %}
 
 {% block content %}
 <div class="content">

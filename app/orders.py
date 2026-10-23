@@ -50,6 +50,28 @@ def type_name(typeid):
     return row['typeName'] if row else ''
 
 
+def type_image(typeid):
+    """The type's picture on CCP's image server, for link previews. Blueprints
+    (and reaction formulas, also category 9) have no 'icon' variant, only 'bp'."""
+    row = db.fetch_one('select "categoryID" from evesde."invTypes" it '
+                       'join evesde."invGroups" ig on ig."groupID"=it."groupID" '
+                       'where it."typeID"=%(typeid)s', {'typeid': typeid})
+    variation = 'bp' if row and row['categoryID'] == 9 else 'icon'
+    return f'https://images.evetech.net/types/{typeid}/{variation}?size=128'
+
+
+def region_name(region):
+    row = db.fetch_one('select "regionName" from evesde."mapRegions" where "regionID"=%(region)s',
+                       {'region': region})
+    return row['regionName'] if row else ''
+
+
+def station_name(station):
+    row = db.fetch_one('select "stationName" from evesde."staStations" where "stationID"=%(station)s',
+                       {'station': station})
+    return row['stationName'] if row else ''
+
+
 def orders_for_type(typeid, orderset, join='', where='', params=None):
     """Returns (sellorders, buyorders) for one type in one orderset."""
     params = dict(params or {}, typeid=typeid, orderset=orderset)
@@ -60,13 +82,16 @@ def orders_for_type(typeid, orderset, join='', where='', params=None):
     return db.fetch_all(sell_sql, params), db.fetch_all(buy_sql, params)
 
 
-def type_page_args(typeid, orderset=None, typename=None, **query):
+def type_page_args(typeid, orderset=None, typename=None, scope='', **query):
+    """scope names the page's location (a region, station, ...) in link previews."""
     if orderset is None:
         orderset = latest_orderset()
     sellorders, buyorders = orders_for_type(typeid, orderset, **query)
     return {
         'type': typeid,
         'typename': type_name(typeid) if typename is None else typename,
+        'typeimage': type_image(typeid),
+        'scope': scope,
         'orderset': orderset,
         'buyorders': buyorders,
         'sellorders': sellorders,

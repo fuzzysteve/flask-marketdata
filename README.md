@@ -38,6 +38,7 @@ All configuration is through environment variables.
 | `MARKETDATA_DB_USER` | `marketdata` | Database user |
 | `MARKETDATA_DB_PASSWORD` | *(empty)* | Database password |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | Redis server |
+| `PYAPP_SITE_URL` | `https://market.fuzzwork.co.uk` | Base of the absolute URLs in link previews |
 | `PYAPP_ALLOW_WRITES` | `0` | Set to `1` to let the appraisal form save appraisals |
 | `PUBLIC_DIR` | `../public` | Directory containing `aggregatecsv.csv.gz` (written by the loaders) |
 | `ORDERBOOK_DIR` | `/opt/orderbooks` | Order book dumps served under `/orderbooks/` |

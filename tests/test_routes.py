@@ -163,3 +163,21 @@ def test_chart_locations(monkeypatch):
     assert history.chart_locations(10000002) == [{'id': 10000002, 'name': ''}]
     assert history.chart_locations(60003760) == [{'id': 60003760, 'name': 'Jita'}]
     assert history.chart_locations(60000001) == []
+
+
+def test_link_preview_tags(client, monkeypatch):
+    from app.routes import pages
+    jita = 'Jita 4 - Moon 4 - Caldari Navy Assembly Plant'
+    monkeypatch.setattr(pages, 'chart_locations', lambda location: [])
+    monkeypatch.setattr(orders, 'latest_orderset', lambda: 1)
+    monkeypatch.setattr(orders, 'type_name', lambda typeid: 'Rifter Blueprint')
+    monkeypatch.setattr(orders, 'station_name', lambda station: jita)
+    monkeypatch.setattr(db, 'fetch_one', lambda sql, params=None: {'categoryID': 9})
+    monkeypatch.setattr(orders, 'orders_for_type', lambda typeid, orderset, **query: (
+        [{'price': '2500000.00', 'stationName': jita}], []))
+    page = client.get('/station/60003760/type/691/').data.decode()
+    assert f'<meta property="og:title" content="Rifter Blueprint · {jita}">' in page
+    # One station's page doesn't repeat the station name.
+    assert 'content="Sell from 2,500,000.00 ISK (1 order). No buy orders."' in page
+    assert 'content="https://images.evetech.net/types/691/bp?size=128"' in page
+    assert 'content="https://market.fuzzwork.co.uk/station/60003760/type/691/"' in page

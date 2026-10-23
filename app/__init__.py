@@ -35,6 +35,8 @@ def create_app():
         split=phpcompat.split_filter,
         json_encode=phpcompat.php_json,
     )
+    # Absolute URLs in link previews (og:url, og:image).
+    app.jinja_env.globals['site_url'] = os.environ.get('PYAPP_SITE_URL', 'https://market.fuzzwork.co.uk')
 
     @app.after_request
     def default_cache_control(response):
