@@ -101,6 +101,46 @@
 <p>If you're wanting <em>all the aggregated market date</em>, then you'll probably want to get https://market.fuzzwork.co.uk/aggregatecsv.csv.gz, which containst a full dump of the data. Though if an item isn't on the market, you'll get _nothing_ back for it. and it'll require a little manipulation to be easily usable. Unfortunately it's too big for google sheets. excel handles it.</p>
 
 <hr>
+<h2>Price history</h2>
+<p>The aggregates are snapshotted four times a day (from the 00:06, 06:06, 12:06 and 18:06 UTC loads), for Global (0), every region, and the five trade hub stations (Jita 4-4, Amarr VIII, Dodixie, Rens and Hek). It goes back to 2025-01-01, though before 2026-04-25 there's only one snapshot a day. Once a month is more than a year old, it's thinned to the first snapshot of each day.</p>
+<p>It's the data behind the charts on the item, region and hub pages. One location and one type per request:</p>
+<pre>https://market.fuzzwork.co.uk/api/history/&lt;location&gt;/&lt;typeID&gt;/</pre>
+<pre>https://market.fuzzwork.co.uk/api/history/60003760/34/</pre>
+<p>Returning the whole history, oldest first, looking like (this is truncated)</p>
+<pre>
+{
+  "location": 60003760,
+  "typeid": 34,
+  "history": [
+    {
+      "snapshot": "2026-10-23 00:06:00",
+      "buypercentile": "3.7610256041930072",
+      "buymax": "3.85",
+      "buyvolume": "6753013772",
+      "buyorders": 35,
+      "sellpercentile": "3.9299999999999997",
+      "sellmin": "3.93",
+      "sellvolume": "8232158982",
+      "sellorders": 22
+    },
+    {
+      "snapshot": "2026-10-23 06:06:00",
+      "buypercentile": "3.7224427952835057",
+      "buymax": "3.8",
+      "buyvolume": "6695879614",
+      "buyorders": 35,
+      "sellpercentile": "3.94",
+      "sellmin": "3.94",
+      "sellvolume": "7694075613",
+      "sellorders": 21
+    }
+  ]
+}
+</pre>
+<p>The snapshot time is UTC, and when the orders were downloaded. Prices and volumes are strings, the same as the aggregates, and the order counts are numbers. The percentile is the same 5% percentile as in the aggregates. If there were no orders on one side, that side's fields are null. A location or type that isn't tracked gives you an empty history. Now and then a snapshot is missing.</p>
+<p>If you want this for a lot of items, please pull it once and keep it, rather than asking every time. It only changes every six hours.</p>
+
+<hr>
 <h2>Files</h2>
 <ul>
 <li><a href="/orderbooks/latest.csv.gz">latest.csv.gz</a> - linked to the latest file</li>
