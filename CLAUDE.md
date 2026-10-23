@@ -3,6 +3,19 @@
 Flask port of the Fuzzwork Market PHP (Slim 3) site. It went live on market.fuzzwork.co.uk on
 2026-10-21. Install and run instructions are in README.md.
 
+## Deployment
+
+This is the live production site; `/opt/web/market/pyapp` is what serves it.
+
+- Files in `app/static/` (JS, CSS) are served straight from disk, so they go live the moment they're written. Templates and Python only change on `systemctl restart market-python`.
+- When a change touches both, write all the files and then restart straight away, so the site isn't left half-updated. Static JS must also tolerate the old templates for that moment (see `history.js`).
+- nginx only caches GET `/aggregates/`, for 5 minutes; there's no page cache to purge. If `/aggregates/` output changes, clear it with `rm -rf /var/cache/nginx/aggregates-python/*` or wait out the 5 minutes.
+- After any deploy, curl the key pages (home, a type page, `/api/`, `/appraisal/`, a long `/aggregates/` URL) through https and confirm they return 200, then check `logs/error.log`.
+
+## Scope
+
+When a request is ambiguous about scope (e.g. "do the cleanup", "tidy dependencies"), list the specific items you plan to change and confirm before restructuring front-end libraries, templates or architecture. Prefer the narrowest reasonable reading.
+
 ## Layout
 
 - `app/__init__.py`: `create_app()`, Jinja filters, default `Cache-Control`, `json_response()`
@@ -76,3 +89,14 @@ HTML is sent with `Cache-Control: public, max-age=300`, so reload with the cache
   - nginx timings (`rt=`, `urt=`) and cache status (`cs=`) are parsed by the custom format in `/etc/netdata/python.d/web_log.conf`.
   - The alarm `gunicorn_log_errors` (`/etc/netdata/health.d/gunicorn.conf`) fires on gunicorn critical/error/exception log messages. 5xx responses are covered by the stock web_log `1m_internal_errors` alarm.
 - **No auth:** the site has no logins or sessions. The EVE SSO routes (`/authlogin`, `/auth/updater`) were removed on 2026-10-23: they exchanged a code and discarded the token. The structure-market loader keeps its own refresh token in `/opt/pricegetter`.
+
+## Ops checklist
+
+- **nginx:** create any `proxy_cache_path` or temp directories (owned by `www-data`) before reloading. Always run `nginx -t` before `systemctl reload nginx`. Keep the proxy buffers large enough for long `/aggregates/` URLs (see Production).
+- **gunicorn:** keep `limit_request_line = 8190`. API clients send `/aggregates/` URLs of up to ~8k, and the 4094 default rejected them with 400.
+- **Postgres:** check whether a setting needs a reload or a restart (`SELECT name, context FROM pg_settings WHERE name = '...'`) and say which one you're doing.
+- **Ports and migrations:** grep JS, templates and config for hardcoded hosts or API URLs from the old site.
+
+## Safe scripting
+
+The server is shared with production services. Bound memory for analysis jobs: stream logs instead of loading them whole, limit worker counts, and prefer `nice` / `timeout`. Never run an unbounded `while true` loop without a `timeout` wrapper.
