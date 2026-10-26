@@ -9,6 +9,10 @@ timeout = 30
 # default (4094) rejected them with 400; 8190 is its maximum short of
 # unlimited and matches nginx's default 8k request-line limit.
 limit_request_line = 8190
+# gunicorn 25.1+ opens a gunicornc control socket by default, in $HOME/.gunicorn
+# (/var/www for www-data, which it can't write to, so it only logs a warning).
+# Unused here; systemd and signals manage the service. Older versions ignore this.
+control_socket_disable = True
 accesslog = 'logs/access.log'
 errorlog = 'logs/error.log'
 pidfile = 'logs/gunicorn.pid'
