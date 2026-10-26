@@ -1,0 +1,13 @@
+[Unit]
+Description=Fuzzwork Market: post outdated/vulnerable Python packages in the venv to Discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/web/market/pyapp
+# DISCORD_WEBHOOK_URL only; kept out of the app's env file and the repo.
+EnvironmentFile=/etc/market-discord.env
+ExecStart=/opt/web/market/pyapp/.venv/bin/python scripts/check_outdated.py

@@ -1,0 +1,9 @@
+[Unit]
+Description=Check the venv for outdated Python packages daily
+
+[Timer]
+OnCalendar=*-*-* 09:15:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
