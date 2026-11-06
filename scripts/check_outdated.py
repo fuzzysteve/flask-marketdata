@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Report outdated packages in the venv (and known vulnerabilities in the installed versions)
-to a Discord webhook. Run daily by systemd/market-outdated-check.timer.
+"""Report outdated packages in the venv that runs it (and known vulnerabilities in the installed
+versions) to a Discord webhook. Run daily by systemd/market-outdated-check.timer, and for the
+loader's venv by systemd/market-outdated-check-loader.timer.
 
     .venv/bin/python scripts/check_outdated.py            # post to $DISCORD_WEBHOOK_URL
     .venv/bin/python scripts/check_outdated.py --dry-run  # print the message instead
+    /opt/pricegetter/pricegetter/bin/python scripts/check_outdated.py   # check another venv
 
-Says nothing when everything is current. Stdlib only, so it works whatever state the venv is in."""
+The project is the venv's parent directory: its requirements*.txt mark what is pinned, and its
+name goes in the message. Says nothing when everything is current. Stdlib only, so it works
+whatever state the venv is in."""
 import argparse
 import importlib.metadata
 import json
@@ -15,7 +19,7 @@ import re
 import sys
 import urllib.request
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(sys.prefix)
 # Discord's Cloudflare front rejects urllib's default User-Agent.
 USER_AGENT = 'fuzzwork-market-outdated-check (+https://market.fuzzwork.co.uk/)'
 DISCORD_LIMIT = 2000
@@ -94,10 +98,22 @@ def message(outdated, vulnerable, failed):
         parts.append('Could not check: ' + ', '.join(failed))
     if not parts:
         return None
-    text = '**market.fuzzwork.co.uk** pyapp venv\n' + '\n\n'.join(parts)
-    if len(text) > DISCORD_LIMIT:
-        text = text[:DISCORD_LIMIT - 20] + '\n… (truncated)'
-    return text
+    return f'**market.fuzzwork.co.uk** {os.path.basename(ROOT)} venv\n' + '\n\n'.join(parts)
+
+
+def chunks(text):
+    """Split text at line breaks into pieces that fit in one Discord message."""
+    out, cur = [], ''
+    for line in text.split('\n'):
+        if len(line) > DISCORD_LIMIT:
+            line = line[:DISCORD_LIMIT - 1] + '…'
+        if cur and len(cur) + 1 + len(line) > DISCORD_LIMIT:
+            out.append(cur)
+            cur = line
+        else:
+            cur = f'{cur}\n{line}' if cur else line
+    out.append(cur)
+    return out
 
 
 def post(webhook, text):
@@ -121,8 +137,10 @@ def main():
         webhook = os.environ.get('DISCORD_WEBHOOK_URL')
         if not webhook:
             sys.exit('DISCORD_WEBHOOK_URL is not set')
-        post(webhook, text)
-        logging.info('posted to Discord')
+        parts = chunks(text)
+        for part in parts:
+            post(webhook, part)
+        logging.info('posted to Discord (%d message%s)', len(parts), '' if len(parts) == 1 else 's')
 
 
 if __name__ == '__main__':
