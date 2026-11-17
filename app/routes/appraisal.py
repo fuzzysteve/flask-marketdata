@@ -65,7 +65,22 @@ def display(region, identifier, as_json):
     if not row:
         abort(404)
     items = row['list'] if isinstance(row['list'], dict) else {}
+    appraisal, total = _price(regionid, items, typenames)
 
+    # Same keys, in the same order, as the PHP's $args.
+    args = {'region': region_row['regionName'], 'identifier': identifier}
+    if as_json is not None:
+        args['json'] = as_json
+    args.update(regionid=regionid, appraisal=appraisal, total=total)
+
+    if as_json not in (None, '', '0'):
+        return json_response(args, expires_in=300)
+    return render_template('displayappraisal.phtml', **args)
+
+
+def _price(regionid, items, typenames):
+    """Prices {typeID string: quantity} in a region from the Redis aggregates.
+    Returns the appraisal lines and their totals."""
     # Fetch all buy/sell keys with MGET (in chunks) rather than one GET round trip per key
     keys = []
     for item in items:
@@ -91,13 +106,51 @@ def display(region, identifier, as_json):
         for key in total:
             total[key] += php_number(line[key])
         appraisal.append(line)
+    return appraisal, total
 
-    # Same keys, in the same order, as the PHP's $args.
-    args = {'region': region_row['regionName'], 'identifier': identifier}
-    if as_json is not None:
-        args['json'] = as_json
-    args.update(regionid=regionid, appraisal=appraisal, total=total)
 
-    if as_json not in (None, '', '0'):
-        return json_response(args, expires_in=300)
-    return render_template('displayappraisal.phtml', **args)
+# Flask's automatic OPTIONS would answer the preflight without the CORS headers.
+@bp.route('/api/appraisal/', methods=['POST'], provide_automatic_options=False)
+def api_appraisal():
+    """Prices a paste without saving it. The response is the saved appraisal's
+    JSON without the identifier."""
+    body = request.form if request.form else (request.get_json(silent=True) or {})
+    if not isinstance(body, dict):
+        body = {}
+    region = str(body.get('region', ''))
+    pasteblock = body.get('pasteblock')
+    if not region.isascii() or not region.isdigit():
+        return _api_error('Give a regionID as region, e.g. 10000002 for The Forge')
+    if not isinstance(pasteblock, str):
+        return _api_error('Give the items to price as pasteblock')
+    region_row = db.fetch_one('select "regionName","regionID" from evesde."mapRegions" '
+                              'where "regionID"=%(region)s', {'region': int(region)})
+    if not region_row:
+        return _api_error(f'Not a region: {region}')
+
+    inventory = appraisal_parser.parse(pasteblock, _typeid_lookup())
+    appraisal, total = _price(region_row['regionID'], {str(k): v for k, v in inventory.items()},
+                              _typename_lookup())
+    return _api_cors(json_response({'region': region_row['regionName'],
+                                    'regionid': region_row['regionID'],
+                                    'appraisal': appraisal, 'total': total}))
+
+
+@bp.route('/api/appraisal/', methods=['OPTIONS'])
+def api_appraisal_preflight():
+    # A JSON POST from a browser on another site sends this first.
+    response = _api_cors(current_app.response_class(status=204))
+    response.headers['Access-Control-Allow-Methods'] = 'POST'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Max-Age'] = '86400'
+    return response
+
+
+def _api_error(message):
+    return _api_cors(json_response({'error': message}, status=400))
+
+
+def _api_cors(response):
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Cache-Control'] = 'no-store'
+    return response

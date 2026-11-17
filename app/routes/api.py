@@ -19,6 +19,14 @@ def _location(params):
     return None
 
 
+def _aggregate_side(value):
+    """One side of a Redis aggregate as the /aggregates/ fields, 0 where missing."""
+    details = (value or '|||||||').split('|')
+    details += [None] * (len(AGGREGATE_FIELDS) - len(details))
+    return {field: phpcompat.php_truthy_or_zero(details[i])
+            for i, field in enumerate(AGGREGATE_FIELDS)}
+
+
 @bp.route('/aggregates/', methods=['GET', 'POST'])
 def aggregates():
     region = _location(request.args)
@@ -40,13 +48,7 @@ def aggregates():
 
     result = {}
     for t in typelist:
-        entry = {}
-        for side in ('buy', 'sell'):
-            details = (next(values) or '|||||||').split('|')
-            details += [None] * (len(AGGREGATE_FIELDS) - len(details))
-            entry[side] = {field: phpcompat.php_truthy_or_zero(details[i])
-                           for i, field in enumerate(AGGREGATE_FIELDS)}
-        result[t] = entry
+        result[t] = {side: _aggregate_side(next(values)) for side in ('buy', 'sell')}
 
     response = json_response(phpcompat.php_array(result), expires_in=300)
     response.headers['Access-Control-Allow-Origin'] = '*'
@@ -156,46 +158,112 @@ def _parse_day(text):
         return None
 
 
-@bp.route('/api/history/<int:location>/')
-def bulk_price_history(location):
-    def error(message):
-        return _cors_json({'error': message}, status=400)
+class _BadRequest(Exception):
+    pass
 
+
+def _error(message):
+    return _cors_json({'error': message}, status=400)
+
+
+def _typeids_arg(limit):
+    """The types=34,35,36 argument as a list of ints, without repeats."""
     typeids = []
     for part in request.args.get('types', '').split(','):
         part = part.strip()
         if part == '':
             continue
-        if not part.isdigit():
-            return error(f'Not a typeID: {part}')
+        if not part.isascii() or not part.isdigit():
+            raise _BadRequest(f'Not a typeID: {part}')
         if int(part) not in typeids:
             typeids.append(int(part))
     if not typeids:
-        return error('Give the typeIDs as types=34,35,36')
-    if len(typeids) > BULK_HISTORY_MAX_TYPES:
-        return error(f'At most {BULK_HISTORY_MAX_TYPES} types per request')
+        raise _BadRequest('Give the typeIDs as types=34,35,36')
+    if len(typeids) > limit:
+        raise _BadRequest(f'At most {limit} types per request')
+    return typeids
+
+
+@bp.route('/api/history/<int:location>/')
+def bulk_price_history(location):
+    try:
+        typeids = _typeids_arg(BULK_HISTORY_MAX_TYPES)
+    except _BadRequest as e:
+        return _error(str(e))
 
     end = datetime.datetime.now(datetime.timezone.utc).date()
     if request.args.get('to'):
         end = _parse_day(request.args['to'])
         if end is None:
-            return error('to must be a date, YYYY-MM-DD')
+            return _error('to must be a date, YYYY-MM-DD')
     start = end - datetime.timedelta(days=BULK_HISTORY_DEFAULT_DAYS - 1)
     if request.args.get('from'):
         start = _parse_day(request.args['from'])
         if start is None:
-            return error('from must be a date, YYYY-MM-DD')
+            return _error('from must be a date, YYYY-MM-DD')
     days = (end - start).days + 1
     if days < 1:
-        return error('from is after to')
+        return _error('from is after to')
     if days * len(typeids) > BULK_HISTORY_MAX_TYPE_DAYS:
-        return error(f'Too much at once: types x days can be up to {BULK_HISTORY_MAX_TYPE_DAYS} '
+        return _error(f'Too much at once: types x days can be up to {BULK_HISTORY_MAX_TYPE_DAYS} '
                      f'(this asked for {len(typeids)} x {days}). Ask for fewer types or a shorter range.')
 
     series = history.bulk_series(location, typeids, start, end)
     return _cors_json({'location': location, 'from': start.isoformat(), 'to': end.isoformat(),
                        'history': {str(typeid): rows for typeid, rows in series.items()}},
                       expires_in=1800)
+
+
+# One indexed lookup per type, so far more types than the bulk history:
+# 1,000 take under 0.2s.
+AT_HISTORY_MAX_TYPES = 1000
+
+
+def _parse_time(text):
+    """A UTC date or date and time. A bare date means the end of that day."""
+    day = _parse_day(text)
+    if day is not None:
+        return datetime.datetime.combine(day, datetime.time.max), day.isoformat()
+    if text.endswith(('Z', 'z')):
+        text = text[:-1] + '+00:00'
+    try:
+        when = datetime.datetime.fromisoformat(text)
+    except ValueError:
+        return None, None
+    if when.tzinfo is not None:
+        when = when.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return when, when.strftime('%Y-%m-%d %H:%M:%S')
+
+
+@bp.route('/api/history/<int:location>/at/<when>/')
+def price_history_at(location, when):
+    try:
+        typeids = _typeids_arg(AT_HISTORY_MAX_TYPES)
+    except _BadRequest as e:
+        return _error(str(e))
+    at, label = _parse_time(when)
+    if at is None:
+        return _error('The time must be a UTC date or date and time: 2026-11-01 or 2026-11-01T12:00')
+    prices = history.prices_at(location, typeids, at)
+    return _cors_json({'location': location, 'at': label,
+                       'prices': {str(typeid): row for typeid, row in prices.items()}},
+                      expires_in=1800)
+
+
+def _hubs():
+    return cache.cached_lookup('hubs', lambda: {'hubs': history.hub_locations()})['hubs']
+
+
+@bp.route('/api/hubs/type/<int:typeid>/')
+def hubs_type(typeid):
+    hubs = _hubs()
+    keys = [f'{hub["id"]}|{typeid}|{buy}' for hub in hubs for buy in ('true', 'false')]
+    values = iter(cache.mget_chunked(keys))
+    result = [{'station': hub['id'], 'name': hub['name'],
+               'buy': _aggregate_side(next(values)), 'sell': _aggregate_side(next(values))}
+              for hub in hubs]
+    return _cors_json({'typeid': typeid, 'typename': orders.type_name(typeid), 'hubs': result},
+                      expires_in=300)
 
 
 @bp.route('/api/')

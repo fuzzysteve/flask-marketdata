@@ -248,6 +248,33 @@ def bulk_series(location, typeids, start, end):
     return result
 
 
+# How far back a point-in-time lookup goes for a type's last snapshot. Days
+# before 2026-04-25 have one snapshot, and the odd one is missing, so it's more
+# than a day; much more and a type that dropped off the market would get an old price.
+AT_LOOKBACK = datetime.timedelta(days=3)
+
+AT_HISTORY_SQL = '''
+        SELECT t."typeID",h.snapshot,h.buypercentile,h.buymax,h.buyvolume,h.buyorders,h.sellpercentile,h.sellmin,h.sellvolume,h.sellorders
+        FROM unnest(%(typeids)s::int[]) t("typeID")
+        CROSS JOIN LATERAL (
+            SELECT * FROM aggregatehistory a
+            WHERE a."typeID"=t."typeID" AND a.location=%(location)s
+            AND a.snapshot<=%(at)s AND a.snapshot>%(after)s
+            order by a.snapshot desc limit 1) h
+'''
+
+
+def prices_at(location, typeids, at):
+    """Each type's last snapshot at or before at (within AT_LOOKBACK), as
+    {typeID: row or None} in the order asked for."""
+    result = {typeid: None for typeid in typeids}
+    rows = db.fetch_all(AT_HISTORY_SQL, {'location': location, 'typeids': list(typeids),
+                                         'at': at, 'after': at - AT_LOOKBACK})
+    for row in rows:
+        result[row.pop('typeID')] = row
+    return result
+
+
 def hub_locations():
     """The snapshotted hubs as chart locations, Jita first."""
     rows = db.fetch_all('select h.stationid,s."stationName" from hubstations h '

@@ -204,6 +204,109 @@ def test_bulk_series_groups_rows_by_type(monkeypatch):
     assert seen['end'] == datetime.date(2026, 11, 1)
 
 
+def test_price_history_at_api(client, monkeypatch):
+    import datetime
+    from app import history
+    calls = []
+
+    def prices_at(location, typeids, at):
+        calls.append((location, typeids, at))
+        return {typeid: {'snapshot': '2026-11-01 18:06:00'} if typeid == 34 else None for typeid in typeids}
+    monkeypatch.setattr(history, 'prices_at', prices_at)
+
+    r = client.get('/api/history/60003760/at/2026-11-01/?types=34,35')
+    assert r.status_code == 200 and r.headers['Access-Control-Allow-Origin'] == '*'
+    assert json.loads(r.data) == {'location': 60003760, 'at': '2026-11-01',
+                                  'prices': {'34': {'snapshot': '2026-11-01 18:06:00'}, '35': None}}
+    # A bare date means the end of that day.
+    assert calls[-1][2] == datetime.datetime(2026, 11, 1, 23, 59, 59, 999999)
+
+    for when, label in (('2026-11-01T12:00', '2026-11-01 12:00:00'),
+                        ('2026-11-01 12:00:30Z', '2026-11-01 12:00:30'),
+                        ('2026-11-01T14:00+02:00', '2026-11-01 12:00:00')):
+        assert json.loads(client.get(f'/api/history/0/at/{when}/?types=34').data)['at'] == label
+        assert calls[-1][2] == datetime.datetime.fromisoformat(label)
+
+    for url in ('/api/history/0/at/yesterday/?types=34', '/api/history/0/at/2026-11-01/',
+                '/api/history/0/at/2026-11-01/?types=' + ','.join(str(t) for t in range(1001))):
+        r = client.get(url)
+        assert r.status_code == 400 and 'error' in json.loads(r.data), url
+    assert client.get('/api/history/0/at/2026-11-01/?types='
+                      + ','.join(str(t) for t in range(1000))).status_code == 200
+
+
+def test_prices_at_fills_missing_types_with_none(monkeypatch):
+    import datetime
+    from app import history
+    seen = {}
+
+    def fetch_all(sql, params=None):
+        seen.update(params)
+        return [{'typeID': 34, 'snapshot': 'a'}]
+    monkeypatch.setattr(db, 'fetch_all', fetch_all)
+    at = datetime.datetime(2026, 11, 1, 12)
+    assert history.prices_at(0, [35, 34], at) == {35: None, 34: {'snapshot': 'a'}}
+    assert seen['at'] == at and seen['after'] == datetime.datetime(2026, 10, 29, 12)
+
+
+def test_hubs_type_api(client, monkeypatch):
+    from app.routes import api
+    monkeypatch.setattr(api, '_hubs', lambda: [{'id': 60003760, 'name': 'Jita'}, {'id': 60008494, 'name': 'Amarr'}])
+    monkeypatch.setattr(orders, 'type_name', lambda typeid: 'Tritanium')
+    requested = []
+
+    def mget_chunked(keys):
+        requested.extend(keys)
+        return ['3.0|4.0|0.01|1|3.2|100|5|3.5', '4.6|300|3.21|1|4.9|100|5|3.9', None, None]
+    monkeypatch.setattr(cache, 'mget_chunked', mget_chunked)
+
+    r = client.get('/api/hubs/type/34/')
+    assert r.status_code == 200 and r.headers['Access-Control-Allow-Origin'] == '*'
+    assert requested == ['60003760|34|true', '60003760|34|false', '60008494|34|true', '60008494|34|false']
+    data = json.loads(r.data)
+    assert data['typeid'] == 34 and data['typename'] == 'Tritanium'
+    jita, amarr = data['hubs']
+    assert jita['station'] == 60003760 and jita['name'] == 'Jita'
+    assert jita['buy']['max'] == '4.0' and jita['sell']['min'] == '3.21' and jita['sell']['percentile'] == '3.9'
+    # No orders: every field 0, as in /aggregates/.
+    assert set(amarr['buy'].values()) == {0} and set(amarr['sell'].values()) == {0}
+
+
+def test_api_appraisal_matches_saved_appraisal(client, fake_appraisal):
+    saved = json.loads(client.get('/appraisal/10000002/abc/json').data)
+    for r in (client.post('/api/appraisal/', data={'region': '10000002', 'pasteblock': 'Tritanium\t100'}),
+              client.post('/api/appraisal/', json={'region': 10000002, 'pasteblock': 'Tritanium\t100'})):
+        assert r.status_code == 200 and r.headers['Access-Control-Allow-Origin'] == '*'
+        assert r.headers['Cache-Control'] == 'no-store'
+        data = json.loads(r.data)
+        assert list(data) == ['region', 'regionid', 'appraisal', 'total']
+        assert data['region'] == 'The Forge' and data['total'] == saved['total']
+        # The saved list holds the quantity as it was stored ('100'); the paste gives 100.
+        assert data['appraisal'][0]['pbuy'] == saved['appraisal'][0]['pbuy'] == 350
+
+
+def test_api_appraisal_never_writes(app, fake_appraisal, monkeypatch):
+    app.config['ALLOW_WRITES'] = True
+    monkeypatch.setattr(db, 'execute', lambda *a, **k: pytest.fail('wrote to the DB'))
+    r = app.test_client().post('/api/appraisal/', data={'region': '10000002', 'pasteblock': 'Tritanium\t5'})
+    assert r.status_code == 200
+
+
+def test_api_appraisal_bad_input_and_preflight(client, fake_appraisal):
+    for body in ({'pasteblock': 'Tritanium'}, {'region': 'x', 'pasteblock': 'Tritanium'},
+                 {'region': '10000002'}, {'region': '10000001', 'pasteblock': 'Tritanium'}):
+        r = client.post('/api/appraisal/', data=body)
+        assert r.status_code == 400 and 'error' in json.loads(r.data), body
+    assert client.post('/api/appraisal/', json=['x']).status_code == 400
+    # Nothing recognised is an empty appraisal, not an error.
+    data = json.loads(client.post('/api/appraisal/', data={'region': '10000002', 'pasteblock': 'nothing'}).data)
+    assert data['appraisal'] == [] and data['total']['psell'] == 0
+
+    r = client.options('/api/appraisal/')
+    assert r.status_code == 204 and r.headers['Access-Control-Allow-Origin'] == '*'
+    assert r.headers['Access-Control-Allow-Headers'] == 'Content-Type'
+
+
 def test_chart_locations(monkeypatch):
     from app import history
     monkeypatch.setattr(history, 'hub_locations', lambda: [{'id': 60003760, 'name': 'Jita'}])

@@ -163,6 +163,102 @@
   }
 }
 </pre>
+<h3>Prices at a point in time</h3>
+<p>If you want what things were worth at a particular time (valuing a hangar on the 1st of the month, say), ask for the snapshot at or before it:</p>
+<pre>https://market.fuzzwork.co.uk/api/history/&lt;location&gt;/at/&lt;time&gt;/?types=34,35,36</pre>
+<pre>https://market.fuzzwork.co.uk/api/history/60003760/at/2026-11-01/?types=34,35</pre>
+<p>The time is UTC: a date, meaning the end of that day (so you get its last snapshot), or a date and time like <code>2026-11-01T12:00</code>. Up to 1,000 types per request. Each type gets its last snapshot at or before that time, from up to three days before. If there isn't one (it wasn't on the market, or isn't tracked), it's null. Check each one's <code>snapshot</code>: in thinned months there's only one a day.</p>
+<pre>
+{
+  "location": 60003760,
+  "at": "2026-11-01",
+  "prices": {
+    "34": {
+      "snapshot": "2026-11-01 18:06:00",
+      "buypercentile": "3.752236984445976",
+      "buymax": "3.77",
+      "buyvolume": "6766529480",
+      "buyorders": 29,
+      "sellpercentile": "3.957626728755842",
+      "sellmin": "3.95",
+      "sellvolume": "5195092567",
+      "sellorders": 20
+    },
+    "35": { ... }
+  }
+}
+</pre>
+
+<hr>
+<h2>One item at every hub</h2>
+<p>The current aggregates for one type at each of the five trade hubs, Jita first, in one request:</p>
+<pre>https://market.fuzzwork.co.uk/api/hubs/type/&lt;typeID&gt;/</pre>
+<pre>https://market.fuzzwork.co.uk/api/hubs/type/34/</pre>
+<p>The buy and sell fields are the same as the aggregates above, including 0 where there are no orders.</p>
+<pre>
+{
+  "typeid": 34,
+  "typename": "Tritanium",
+  "hubs": [
+    {
+      "station": 60003760,
+      "name": "Jita 4 - Moon 4 - Caldari Navy Assembly Plant",
+      "buy": {
+        "weightedAverage": "2.9748224147724334",
+        "max": "4.1",
+        "min": "0.01",
+        "stddev": "1.0896123814659833",
+        "median": "3.625",
+        "volume": "9103379274.0",
+        "orderCount": "48",
+        "percentile": "4.025870165892421"
+      },
+      "sell": { ... }
+    },
+    {
+      "station": 60008494,
+      "name": "Amarr VIII (Oris) - Emperor Family Academy",
+      ...
+    },
+    ...
+  ]
+}
+</pre>
+
+<hr>
+<h2>Appraisal</h2>
+<p>To price a paste (an inventory, a contract, a fit) from a script without saving an appraisal, POST it to</p>
+<pre>https://market.fuzzwork.co.uk/api/appraisal/</pre>
+<p>with <code>region</code> (a regionID, e.g. 10000002 for The Forge) and <code>pasteblock</code> (the text you'd paste into the <a href="/appraisal/">appraisal page</a>), either as a form or as JSON:</p>
+<pre>curl -X POST https://market.fuzzwork.co.uk/api/appraisal/ -H 'Content-Type: application/json' \
+  -d '{"region": 10000002, "pasteblock": "Tritanium\t1000\nPyerite\t500"}'</pre>
+<p>You get the same JSON as a saved appraisal's <code>/json</code> view, without the identifier. <code>pbuy</code> and <code>psell</code> are quantity times the 5% percentile, <code>mbuy</code> is quantity times the highest buy, and <code>msell</code> is quantity times the lowest sell. Lines the parser doesn't recognise are left out. Missing or bad parameters get a 400 with an <code>error</code> message. Nothing is stored, and the body can be up to 1 MB.</p>
+<pre>
+{
+  "region": "The Forge",
+  "regionid": 10000002,
+  "appraisal": [
+    {
+      "typeid": "34",
+      "typename": "Tritanium",
+      "quantity": 1000,
+      "pbuy": 3986.6131998471465,
+      "psell": 4300,
+      "mbuy": 4100,
+      "msell": 4300,
+      "volume": 10
+    },
+    ...
+  ],
+  "total": {
+    "pbuy": 247906.51316727715,
+    "mbuy": 249495,
+    "psell": 283491.21933100536,
+    "msell": 247465,
+    "volume": 27304
+  }
+}
+</pre>
 
 <hr>
 <h2>Files</h2>
