@@ -227,6 +227,27 @@ def series(location, typeid):
     return db.fetch_all(HISTORY_SQL, {'location': location, 'typeid': typeid})
 
 
+BULK_HISTORY_SQL = '''
+        SELECT "typeID",snapshot,buypercentile,buymax,buyvolume,buyorders,sellpercentile,sellmin,sellvolume,sellorders
+        FROM aggregatehistory
+        WHERE "typeID"=any(%(typeids)s) AND location=%(location)s
+        AND snapshot>=%(start)s AND snapshot<%(end)s
+        order by "typeID",snapshot
+'''
+
+
+def bulk_series(location, typeids, start, end):
+    """Several types' history from the start date to the end date (both UTC days,
+    inclusive), as {typeID: [rows]} in the order asked for. Types without any
+    rows get an empty list."""
+    result = {typeid: [] for typeid in typeids}
+    rows = db.fetch_all(BULK_HISTORY_SQL, {'location': location, 'typeids': list(typeids),
+                                           'start': start, 'end': end + datetime.timedelta(days=1)})
+    for row in rows:
+        result[row.pop('typeID')].append(row)
+    return result
+
+
 def hub_locations():
     """The snapshotted hubs as chart locations, Jita first."""
     rows = db.fetch_all('select h.stationid,s."stationName" from hubstations h '

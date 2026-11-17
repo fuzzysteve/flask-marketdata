@@ -1,3 +1,4 @@
+import datetime
 import glob
 
 from flask import Blueprint, redirect, render_template, request
@@ -133,6 +134,68 @@ def price_history(location, typeid):
                               'history': history.series(location, typeid)}, expires_in=1800)
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
+
+
+# Bulk history is bounded by types x days (about 230 bytes per snapshot row, four
+# rows a day): 100 types for 100 days, or a dozen types for the whole history.
+BULK_HISTORY_MAX_TYPES = 100
+BULK_HISTORY_MAX_TYPE_DAYS = 10000
+BULK_HISTORY_DEFAULT_DAYS = 90
+
+
+def _cors_json(data, status=200, expires_in=None):
+    response = json_response(data, expires_in=expires_in, status=status)
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+
+def _parse_day(text):
+    try:
+        return datetime.date.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+@bp.route('/api/history/<int:location>/')
+def bulk_price_history(location):
+    def error(message):
+        return _cors_json({'error': message}, status=400)
+
+    typeids = []
+    for part in request.args.get('types', '').split(','):
+        part = part.strip()
+        if part == '':
+            continue
+        if not part.isdigit():
+            return error(f'Not a typeID: {part}')
+        if int(part) not in typeids:
+            typeids.append(int(part))
+    if not typeids:
+        return error('Give the typeIDs as types=34,35,36')
+    if len(typeids) > BULK_HISTORY_MAX_TYPES:
+        return error(f'At most {BULK_HISTORY_MAX_TYPES} types per request')
+
+    end = datetime.datetime.now(datetime.timezone.utc).date()
+    if request.args.get('to'):
+        end = _parse_day(request.args['to'])
+        if end is None:
+            return error('to must be a date, YYYY-MM-DD')
+    start = end - datetime.timedelta(days=BULK_HISTORY_DEFAULT_DAYS - 1)
+    if request.args.get('from'):
+        start = _parse_day(request.args['from'])
+        if start is None:
+            return error('from must be a date, YYYY-MM-DD')
+    days = (end - start).days + 1
+    if days < 1:
+        return error('from is after to')
+    if days * len(typeids) > BULK_HISTORY_MAX_TYPE_DAYS:
+        return error(f'Too much at once: types x days can be up to {BULK_HISTORY_MAX_TYPE_DAYS} '
+                     f'(this asked for {len(typeids)} x {days}). Ask for fewer types or a shorter range.')
+
+    series = history.bulk_series(location, typeids, start, end)
+    return _cors_json({'location': location, 'from': start.isoformat(), 'to': end.isoformat(),
+                       'history': {str(typeid): rows for typeid, rows in series.items()}},
+                      expires_in=1800)
 
 
 @bp.route('/api/')

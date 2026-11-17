@@ -139,6 +139,30 @@
 </pre>
 <p>The snapshot time is UTC, and when the orders were downloaded. Prices and volumes are strings, the same as the aggregates, and the order counts are numbers. The percentile is the same 5% percentile as in the aggregates. If there were no orders on one side, that side's fields are null. A location or type that isn't tracked gives you an empty history. Now and then a snapshot is missing.</p>
 <p>If you want this for a lot of items, please pull it once and keep it, rather than asking every time. It only changes every six hours.</p>
+<h3>Several types at once</h3>
+<p>For more than one type, leave the typeID off the URL and list the types instead, with an optional date range:</p>
+<pre>https://market.fuzzwork.co.uk/api/history/&lt;location&gt;/?types=34,35,36&amp;from=2026-10-01&amp;to=2026-10-31</pre>
+<p>The dates are UTC days (YYYY-MM-DD), and both ends are included. <code>to</code> defaults to today and <code>from</code> to 90 days before <code>to</code>. You can ask for up to 100 types, and the number of types times the number of days can be up to 10,000: 100 types for 100 days, say, or a dozen types for everything since 2025. Bigger requests get a 400 with an <code>error</code> message, so split them up.</p>
+<p>The history is keyed by typeID, in the order you asked, with the same fields as above. A type with nothing in the range gets an empty list.</p>
+<pre>
+{
+  "location": 60003760,
+  "from": "2026-10-01",
+  "to": "2026-10-31",
+  "history": {
+    "34": [
+      {
+        "snapshot": "2026-10-01 00:06:00",
+        "buypercentile": "3.7728158042072266",
+        "buymax": "3.83",
+        ...
+      },
+      ...
+    ],
+    "35": [ ... ]
+  }
+}
+</pre>
 
 <hr>
 <h2>Files</h2>

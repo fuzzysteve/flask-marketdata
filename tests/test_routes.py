@@ -156,6 +156,54 @@ def test_price_history_api(client, monkeypatch):
     assert data['history'][0]['buypercentile'] == '4.5'
 
 
+def test_bulk_price_history_api(client, monkeypatch):
+    import datetime
+    from app import history
+    calls = []
+
+    def bulk_series(location, typeids, start, end):
+        calls.append((location, typeids, start, end))
+        return {typeid: [] for typeid in typeids}
+    monkeypatch.setattr(history, 'bulk_series', bulk_series)
+
+    r = client.get('/api/history/60003760/?types=35,34,,35&from=2026-10-01&to=2026-10-31')
+    assert r.status_code == 200 and r.headers['Access-Control-Allow-Origin'] == '*'
+    data = json.loads(r.data)
+    assert data == {'location': 60003760, 'from': '2026-10-01', 'to': '2026-10-31',
+                    'history': {'35': [], '34': []}}
+    assert calls[-1] == (60003760, [35, 34], datetime.date(2026, 10, 1), datetime.date(2026, 10, 31))
+
+    # Without from, the last 90 days up to to.
+    data = json.loads(client.get('/api/history/0/?types=34&to=2026-10-31').data)
+    assert data['from'] == '2026-08-03'
+
+    for query in ('', 'types=34,x', 'types=34&from=2026-13-01', 'types=34&from=2026-10-02&to=2026-10-01',
+                  'types=' + ','.join(str(t) for t in range(101)),
+                  'types=' + ','.join(str(t) for t in range(100)) + '&from=2026-01-01&to=2026-04-11'):
+        r = client.get(f'/api/history/0/?{query}')
+        assert r.status_code == 400 and 'error' in json.loads(r.data), query
+    # 100 types x 100 days is allowed.
+    r = client.get('/api/history/0/?types=' + ','.join(str(t) for t in range(100))
+                   + '&from=2026-01-01&to=2026-04-10')
+    assert r.status_code == 200
+
+
+def test_bulk_series_groups_rows_by_type(monkeypatch):
+    import datetime
+    from app import history
+    seen = {}
+
+    def fetch_all(sql, params=None):
+        seen.update(params)
+        return [{'typeID': 34, 'snapshot': 'a'}, {'typeID': 34, 'snapshot': 'b'}, {'typeID': 36, 'snapshot': 'c'}]
+    monkeypatch.setattr(db, 'fetch_all', fetch_all)
+    result = history.bulk_series(0, [36, 35, 34], datetime.date(2026, 10, 1), datetime.date(2026, 10, 31))
+    assert list(result) == [36, 35, 34]
+    assert result == {36: [{'snapshot': 'c'}], 35: [], 34: [{'snapshot': 'a'}, {'snapshot': 'b'}]}
+    # The end day is inclusive.
+    assert seen['end'] == datetime.date(2026, 11, 1)
+
+
 def test_chart_locations(monkeypatch):
     from app import history
     monkeypatch.setattr(history, 'hub_locations', lambda: [{'id': 60003760, 'name': 'Jita'}])
